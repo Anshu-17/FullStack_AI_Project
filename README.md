@@ -10,6 +10,8 @@ PostgreSQL, a lease-based background worker, Gemini + Groq, and a Streamlit UI.
 https://bep-api.onrender.com/docs - log in as `reviewer@demo.local` or
 `viewer@demo.local` (passwords shared privately). Free hosting sleeps when idle: the first load can take ~1 minute.
 
+**Video walkthrough (Loom):** https://www.loom.com/share/9a1d51cb8e4e41a08729343b01b293ea
+
 **Start here:** [docs/submission-summary.md](docs/submission-summary.md) (one page) ·
 [docs/status-matrix.md](docs/status-matrix.md) (built / partial / not built) ·
 [docs/evidence/README.md](docs/evidence/README.md) (proof for every scenario and number).

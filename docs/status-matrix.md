@@ -162,5 +162,5 @@ The brief itself is not stored in this repository. Status values are the brief's
 | 6 | Tests / evidence: tests, outcomes, coverage, sample data, failure-injection artifacts, metrics | Built and proven | [evidence/README.md](evidence/README.md), [test_coverage.md](evidence/test_coverage.md) |
 | 7 | Development decision log | Built and proven | [decision-log.md](decision-log.md) |
 | 8 | AI usage statement | Partial | [ai-usage.md](ai-usage.md) (draft) |
-| 9 | Loom video, 20-30 minutes | Not built yet | [loom-script.md](loom-script.md) (outline following the brief's agenda) |
+| 9 | Loom video, 20-30 minutes | Built and proven | https://www.loom.com/share/9a1d51cb8e4e41a08729343b01b293ea (outline: [loom-script.md](loom-script.md)) |
 | 10 | Submission summary: one-page status matrix, risks, next three priorities | Built and proven | [submission-summary.md](submission-summary.md) |

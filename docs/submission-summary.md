@@ -12,7 +12,7 @@ leases · httpx + BeautifulSoup crawler · Gemini (primary) + Groq (fallback) ·
 
 | Built and proven | Built but unverified | Partial | Not built |
 |---|---|---|---|
-| CSV / URL intake with row-level results (1,000 rows ~1.4 s); dedup by domain; safe crawler (SSRF, robots, budgets); evidence-validated classification with Accounting rule; Possible / Not Found semantics; provider retries + fallback; worker leases, crash recovery, cancel, manual retry; idempotent runs; corrections with optimistic locking and audit trail; human-wins answers with conflict flags; search, filters, export; login + roles; rate limits; structured logs, health / readiness, metrics; reversible migrations; **scenarios A-E demonstrated, F-J tested / demonstrated**; 15-site real pilot + manual audit; 100-job synthetic workload; **live deployment on Render + Supabase (smoke-tested 2026-11-18)** | responsive layout and keyboard use (Streamlit defaults, no audit) | evidence relevance (audit: 66 OK / 9 weak / 3 questionable of 78 quotes); contradictory sources (prompt rule only); AI cost (tokens recorded, cost unknown on free tiers); DNS-rebinding defence (no IP pinning); multi-worker execution (one process run); AI usage statement (draft) | Loom **[until recorded]**; JavaScript-rendered sites; multi-tenancy; real CRM integration (mapping proposed only); user-management screens |
+| CSV / URL intake with row-level results (1,000 rows ~1.4 s); dedup by domain; safe crawler (SSRF, robots, budgets); evidence-validated classification with Accounting rule; Possible / Not Found semantics; provider retries + fallback; worker leases, crash recovery, cancel, manual retry; idempotent runs; corrections with optimistic locking and audit trail; human-wins answers with conflict flags; search, filters, export; login + roles; rate limits; structured logs, health / readiness, metrics; reversible migrations; **scenarios A-E demonstrated, F-J tested / demonstrated**; 15-site real pilot + manual audit; 100-job synthetic workload; **live deployment on Render + Supabase (smoke-tested 2026-11-18)**; responsive layout (checked at 390 px); login kept across refresh; [Loom walkthrough](https://www.loom.com/share/9a1d51cb8e4e41a08729343b01b293ea) | keyboard use (Streamlit defaults, no audit) | evidence relevance (audit: 66 OK / 9 weak / 3 questionable of 78 quotes); contradictory sources (prompt rule only); AI cost (tokens recorded, cost unknown on free tiers); DNS-rebinding defence (no IP pinning); multi-worker execution (one process run); AI usage statement (draft) | JavaScript-rendered sites; multi-tenancy; real CRM integration (mapping proposed only); user-management screens |
 
 ## Key numbers (all from real runs - [evidence/README.md](evidence/README.md))
 
@@ -40,7 +40,7 @@ leases · httpx + BeautifulSoup crawler · Gemini (primary) + Groq (fallback) ·
 ## Submission message (brief section 15)
 
 1. Frontend: https://bep-ui-1dt0.onrender.com  2. Backend / API: https://bep-api.onrender.com (docs: https://bep-api.onrender.com/docs)
-3. Repository: https://github.com/Anshu-17/FullStack_AI_Project  4. Loom: **[LOOM URL]**
+3. Repository: https://github.com/Anshu-17/FullStack_AI_Project  4. Loom: https://www.loom.com/share/9a1d51cb8e4e41a08729343b01b293ea
 5. Documentation: `README.md` + `docs/`  6. Test / run evidence: `docs/evidence/README.md`
 7. Status matrix: this page + `docs/status-matrix.md`
 Credentials (`reviewer@demo.local`, `viewer@demo.local`): sent separately **[via the evaluator-approved method]**,
