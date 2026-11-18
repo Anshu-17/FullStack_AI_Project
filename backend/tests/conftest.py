@@ -9,6 +9,8 @@ os.environ["DATABASE_URL"] = os.environ.get(
     "TEST_DATABASE_URL", "postgresql+psycopg://postgres:devpass@localhost:5432/bep_test"
 )
 os.environ.setdefault("LOG_JSON", "false")
+# Tests make hundreds of requests from one "IP"; the rate-limit test switches limits back on itself.
+os.environ["RATE_LIMIT_ENABLED"] = "false"
 
 import pytest  # noqa: E402
 from alembic import command  # noqa: E402
@@ -104,17 +106,55 @@ def fresh_db():
     wipe()
 
 
-@pytest.fixture()
-def api(db):
-    """HTTP client for the API, using the test's rolled-back session."""
+def _client(db, user=None):
+    """TestClient on the test's rolled-back session; if `user` is given, requests act as that user."""
     from fastapi.testclient import TestClient
 
+    from app.auth import current_user
     from app.db.deps import get_db
     from app.main import app
 
     app.dependency_overrides[get_db] = lambda: db
+    if user is not None:
+        app.dependency_overrides[current_user] = lambda: user
+    return TestClient(app)
+
+
+def _user(db, role):
+    from app.db.models import User
+
+    user = User(email=f"{role}@test.local", password_hash="x", role=role)
+    db.add(user)
+    db.flush()
+    return user
+
+
+@pytest.fixture()
+def api(db):
+    """API client logged in as a REVIEWER (may read and change)."""
+    from app.main import app
     try:
-        yield TestClient(app)
+        yield _client(db, _user(db, "reviewer"))
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.fixture()
+def viewer_api(db):
+    """API client logged in as a VIEWER (read only)."""
+    from app.main import app
+    try:
+        yield _client(db, _user(db, "viewer"))
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.fixture()
+def anon_api(db):
+    """API client with NO login override: real tokens must be sent (auth tests)."""
+    from app.main import app
+    try:
+        yield _client(db)
     finally:
         app.dependency_overrides.clear()
 

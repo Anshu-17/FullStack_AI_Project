@@ -7,16 +7,20 @@ import time
 import uuid
 
 import structlog
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy import text
 
-from app.api import companies, runs, stats, uploads
+from app.api import auth, companies, exports, overrides, runs, stats, uploads
 from app.api.errors import register_error_handlers
+from app.auth import current_user
 from app.config import settings
 from app.db.session import engine
 from app.log_config import get_logger, setup_logging
+from app.ratelimit import limiter, rate_limit_exceeded
 
 setup_logging()
 log = get_logger("api")
@@ -38,9 +42,17 @@ app.add_middleware(
 
 register_error_handlers(app)  # {"error": {"code", "message", "details"}} for every error
 
-# JSON API routes live under /api
-for router in (uploads.router, companies.router, runs.router, stats.router):
-    app.include_router(router, prefix="/api")
+# Rate limits: per-route limits (login, upload) + a default for every route (see app/ratelimit.py)
+app.state.limiter = limiter
+app.add_middleware(SlowAPIMiddleware)
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded)
+
+# Open without login: /health, /ready, /docs, /openapi.json and POST /api/auth/login.
+app.include_router(auth.router, prefix="/api")
+# Everything else under /api needs a logged-in user (viewer or reviewer). Endpoints that
+# CHANGE data additionally depend on require_reviewer.
+for router in (uploads.router, companies.router, overrides.router, runs.router, exports.router, stats.router):
+    app.include_router(router, prefix="/api", dependencies=[Depends(current_user)])
 
 
 @app.middleware("http")

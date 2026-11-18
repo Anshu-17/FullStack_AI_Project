@@ -20,7 +20,13 @@ class Settings(BaseSettings):
 
     # --- Auth ---
     jwt_secret: str = "change-me"
-    jwt_expires_minutes: int = 480
+    jwt_expires_minutes: int = 480  # a login lasts one working day
+
+    # --- Rate limits (per client IP; slowapi syntax "N/period") ---
+    rate_limit_enabled: bool = True
+    rate_limit_login: str = "10/minute"     # slows down password guessing
+    rate_limit_upload: str = "20/minute"
+    rate_limit_default: str = "300/minute"  # everything else
 
     # --- Demo accounts for `python -m app.db.seed` (blank password = generate one) ---
     seed_reviewer_email: str = "reviewer@demo.local"

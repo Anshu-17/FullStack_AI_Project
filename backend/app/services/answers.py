@@ -10,12 +10,12 @@ For each category:
 The automated answer and its evidence are always returned alongside, so a reviewer can
 compare, and `conflict` is True when the human and the latest scan disagree.
 """
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import selectinload
 
 from app.db.enums import Category, JobStatus
-from app.db.models import Classification, Job, Override, Page
+from app.db.models import Classification, Company, Job, Override, Page
 
 ALL_CATEGORIES = [str(c) for c in Category]  # accounting + the 6 site categories
 FINISHED = (JobStatus.COMPLETED, JobStatus.REVIEW_REQUIRED)
@@ -100,11 +100,32 @@ def final_answers_bulk(db, company_ids: list[int], with_evidence: bool = False) 
             answers[category] = {
                 "category": category, "status": status, "provenance": provenance, "explanation": explanation,
                 "automated": automated, "override": human,
-                "override_version": o.version if o else 0,  # the version a reviewer must build on (Hour 5)
+                "version": o.version if o else 0,  # send back as expected_version when correcting
                 "conflict": bool(human and automated and human["status"] != automated["status"]),
             }
         result[company_id] = answers
     return result
+
+
+def company_query(search: str | None = None):
+    """SELECT companies, optionally matching a search text in the name or domain (case-insensitive)."""
+    stmt = select(Company).order_by(Company.name, Company.id)
+    if search and search.strip():
+        like = f"%{search.strip()}%"
+        stmt = stmt.where(or_(Company.name.ilike(like), Company.canonical_domain.ilike(like)))
+    return stmt
+
+
+def matches_filter(answers: dict[str, dict], category: str | None, status: str | None) -> bool:
+    """Filter on FINAL answers: category + status (that category has it); status alone (any category
+    has it); category alone (that category has been answered); neither (everything matches)."""
+    if category and status:
+        return answers[category]["status"] == status
+    if status:
+        return any(a["status"] == status for a in answers.values())
+    if category:
+        return answers[category]["status"] is not None
+    return True
 
 
 def final_answers(db, company_id: int, with_evidence: bool = True) -> dict[str, dict]:

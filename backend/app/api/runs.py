@@ -7,9 +7,10 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.errors import not_found
+from app.auth import require_reviewer
 from app.db.deps import get_db
 from app.db.enums import JOB_TERMINAL, JobStatus
-from app.db.models import Attempt, Classification, Company, Job, JobEvent, Page, Run
+from app.db.models import Attempt, Classification, Company, Job, JobEvent, Page, Run, User
 from app.schemas.common import PageParams, page_params, paginate
 from app.services.runs import cancel_run, company_ids_for_request, create_run, job_counts, retry_failed, retry_job
 
@@ -61,9 +62,9 @@ def item_json(job: Job) -> dict:
 
 @router.post("/runs", status_code=201)
 def start_run(body: RunIn, idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
-              db: Session = Depends(get_db)):
+              db: Session = Depends(get_db), user: User = Depends(require_reviewer)):
     ids = company_ids_for_request(db, body.company_ids, body.upload_id, body.all_companies)
-    run, created, skipped = create_run(db, ids, idempotency_key)
+    run, created, skipped = create_run(db, ids, idempotency_key, created_by=user.id)
     return run_created_response(run, created, skipped)
 
 
@@ -94,13 +95,13 @@ def run_items(run_id: int, status: JobStatus | None = None, params: PageParams =
     return paginate(db, stmt, params, item_json)
 
 
-@router.post("/runs/{run_id}/cancel")
+@router.post("/runs/{run_id}/cancel", dependencies=[Depends(require_reviewer)])
 def cancel(run_id: int, db: Session = Depends(get_db)):
     run, cancelled_now = cancel_run(db, run_id)
     return {**run_json(run, job_counts(db, run_id)), "cancelled_now": cancelled_now}
 
 
-@router.post("/runs/{run_id}/retry-failed")
+@router.post("/runs/{run_id}/retry-failed", dependencies=[Depends(require_reviewer)])
 def retry_failed_jobs(run_id: int, db: Session = Depends(get_db)):
     requeued = retry_failed(db, run_id)
     return {**run_json(_get_run(db, run_id), job_counts(db, run_id)), "requeued": requeued}
@@ -130,7 +131,7 @@ def get_job(job_id: int, db: Session = Depends(get_db)):
     }
 
 
-@router.post("/jobs/{job_id}/retry")
+@router.post("/jobs/{job_id}/retry", dependencies=[Depends(require_reviewer)])
 def retry(job_id: int, db: Session = Depends(get_db)):
     job = retry_job(db, job_id)
     return item_json(job)

@@ -5,14 +5,17 @@ so it answers in well under a second. Research starts with POST /api/runs.
 """
 import hashlib
 
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, File, Request, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.errors import ApiError, not_found
+from app.auth import require_reviewer
+from app.config import settings
 from app.db.deps import get_db
 from app.db.enums import UploadRowResult
-from app.db.models import Upload, UploadRow
+from app.db.models import Upload, UploadRow, User
+from app.ratelimit import limiter
 from app.schemas.common import PageParams, page_params, paginate
 from app.services.ingest import MAX_CSV_BYTES, IngestError, ingest_rows, parse_csv
 
@@ -32,14 +35,17 @@ def upload_summary(upload: Upload) -> dict:
 
 
 @router.post("/uploads", status_code=201)
-async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)):
+@limiter.limit(settings.rate_limit_upload)
+async def upload_csv(request: Request, file: UploadFile = File(...), db: Session = Depends(get_db),
+                     user: User = Depends(require_reviewer)):
     """CSV with columns company_name, website. Returns counts + only the rows that were NOT accepted."""
     data = await file.read(MAX_CSV_BYTES + 1)  # read one byte more than allowed, to detect "too big"
     try:
         rows = parse_csv(data)
     except IngestError as exc:
         raise ApiError(400, exc.code, exc.message) from exc
-    upload = ingest_rows(db, rows, file_name=file.filename, file_sha256=hashlib.sha256(data).hexdigest())
+    upload = ingest_rows(db, rows, uploaded_by=user.id, file_name=file.filename,
+                         file_sha256=hashlib.sha256(data).hexdigest())
     problems = db.scalars(select(UploadRow).where(UploadRow.upload_id == upload.id,
                                                   UploadRow.result != UploadRowResult.ACCEPTED)
                           .order_by(UploadRow.row_no)).all()

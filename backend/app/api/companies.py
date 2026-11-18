@@ -3,17 +3,24 @@ from fastapi import APIRouter, Depends, Header
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import Session
 
 from app.api.errors import ApiError, not_found
 from app.api.runs import run_created_response
+from app.auth import require_reviewer
 from app.db.deps import get_db
 from app.db.enums import Category, ClassStatus, UploadRowResult
-from app.db.models import Company, Job, UploadRow
+from app.db.models import Company, Job, UploadRow, User
 from app.schemas.common import PageParams, page_params, page_response
-from app.services.answers import final_answers, final_answers_bulk, latest_finished_jobs
+from app.services.answers import (
+    company_query,
+    final_answers,
+    final_answers_bulk,
+    latest_finished_jobs,
+    matches_filter,
+)
 from app.services.ingest import ingest_rows
 from app.services.runs import create_run
 
@@ -38,7 +45,7 @@ def job_json(j: Job | None) -> dict | None:
             "started_at": j.started_at, "finished_at": j.finished_at}
 
 
-@router.post("/companies")
+@router.post("/companies", dependencies=[Depends(require_reviewer)])
 def add_company(body: CompanyIn, db: Session = Depends(get_db)):
     """Single company. 201 if new, 200 if the website already exists (no duplicate is created)."""
     upload = ingest_rows(db, [{"row_no": 1, "name": body.name, "website": body.website}])
@@ -70,10 +77,7 @@ def list_companies(search: str | None = None, category: Category | None = None,
     Filters: search (name or domain); category + status (final answer for that category);
     status alone (any category has it); category alone (that category has been answered).
     """
-    stmt = select(Company).order_by(Company.name, Company.id)
-    if search:
-        like = f"%{search.strip()}%"
-        stmt = stmt.where(or_(Company.name.ilike(like), Company.canonical_domain.ilike(like)))
+    stmt = company_query(search)
 
     if category is None and status is None:  # no answer filter: paginate in SQL
         total = db.scalar(select(func.count()).select_from(stmt.order_by(None).subquery()))
@@ -82,16 +86,7 @@ def list_companies(search: str | None = None, category: Category | None = None,
     else:  # the final answer depends on overrides, so filter in Python, then paginate
         all_companies = db.scalars(stmt).all()
         answers = final_answers_bulk(db, [c.id for c in all_companies])
-
-        def keep(c: Company) -> bool:
-            a = answers[c.id]
-            if category and status:
-                return a[category]["status"] == status
-            if status:
-                return any(x["status"] == status for x in a.values())
-            return a[category]["status"] is not None
-
-        matching = [c for c in all_companies if keep(c)]
+        matching = [c for c in all_companies if matches_filter(answers[c.id], category, status)]
         total, companies = len(matching), matching[params.offset: params.offset + params.page_size]
 
     ids = [c.id for c in companies]
@@ -121,8 +116,8 @@ def company_detail(company_id: int, db: Session = Depends(get_db)):
 
 @router.post("/companies/{company_id}/rescan", status_code=201)
 def rescan(company_id: int, idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
-           db: Session = Depends(get_db)):
+           db: Session = Depends(get_db), user: User = Depends(require_reviewer)):
     if db.get(Company, company_id) is None:
         raise not_found("Company", company_id)
-    run, created, skipped = create_run(db, [company_id], idempotency_key, source="rescan")
+    run, created, skipped = create_run(db, [company_id], idempotency_key, source="rescan", created_by=user.id)
     return run_created_response(run, created, skipped)

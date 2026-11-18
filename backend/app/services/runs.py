@@ -92,7 +92,7 @@ def _run_by_key(db, key: str | None) -> Run | None:
 
 
 def create_run(db, company_ids: list[int], idempotency_key: str | None = None,
-               source: str = "api") -> tuple[Run, bool, list[dict]]:
+               source: str = "api", created_by: int | None = None) -> tuple[Run, bool, list[dict]]:
     """Returns (run, created, skipped). created=False means the Idempotency-Key was seen before."""
     existing = _run_by_key(db, idempotency_key)
     if existing:
@@ -110,7 +110,7 @@ def create_run(db, company_ids: list[int], idempotency_key: str | None = None,
         raise ApiError(409, "NOTHING_TO_RUN", "None of the requested companies can be started.", {"skipped": skipped})
 
     run = Run(policy_version=POLICY_VERSION, idempotency_key=idempotency_key, total_items=len(todo),
-              config={"source": source, "requested": len(wanted), "skipped": skipped})
+              created_by=created_by, config={"source": source, "requested": len(wanted), "skipped": skipped})
     db.add(run)
     db.flush()
     jobs = [Job(run_id=run.id, company_id=i, max_attempts=settings.job_max_attempts) for i in todo]

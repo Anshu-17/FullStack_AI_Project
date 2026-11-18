@@ -52,4 +52,4 @@ def test_removed_override_falls_back_to_the_automated_answer(db):
     override(db, company, "feed", "yes", 1)
     override(db, company, "feed", None, 2)  # reviewer removed their correction
     feed = final_answers(db, company.id)["feed"]
-    assert (feed["status"], feed["provenance"], feed["override_version"]) == ("not_found", "site", 2)
+    assert (feed["status"], feed["provenance"], feed["version"]) == ("not_found", "site", 2)
