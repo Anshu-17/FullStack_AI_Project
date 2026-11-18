@@ -1,7 +1,12 @@
-"""The only place the UI talks to the backend. Every page uses these helpers.
+"""The ONLY place the UI talks to the backend. Every page uses these helpers.
 
-The UI never connects to the database directly: it calls the FastAPI backend
-over HTTP and shows the JSON it gets back.
+The UI never connects to the database directly: it calls the FastAPI backend over HTTP
+and shows the JSON it gets back.
+
+Login: the token from POST /api/auth/login is kept in st.session_state (this browser tab
+only, never on disk) and sent as "Authorization: Bearer <token>". If the backend answers
+401 to a logged-in request (token expired or account disabled), we log out and send the
+user back to the login page with a message.
 """
 import os
 
@@ -10,49 +15,105 @@ import streamlit as st
 
 API_URL = os.environ.get("API_URL", "http://localhost:8000").rstrip("/")
 TIMEOUT = httpx.Timeout(15.0)
+SESSION_EXPIRED = "Your session expired, please log in again."
 
 
 class ApiError(Exception):
     """A problem the user should see, already turned into a readable message."""
 
-    def __init__(self, message: str, status: int | None = None):
+    def __init__(self, message: str, status: int | None = None, code: str | None = None, details: dict | None = None):
         super().__init__(message)
-        self.message = message
-        self.status = status
+        self.message, self.status, self.code, self.details = message, status, code, details or {}
 
+
+# ------------------------------------------------------------------ session
+
+def is_logged_in() -> bool:
+    return bool(st.session_state.get("token"))
+
+
+def current_user() -> dict:
+    return st.session_state.get("user") or {}
+
+
+def is_reviewer() -> bool:
+    return current_user().get("role") == "reviewer"
+
+
+def logout(message: str | None = None) -> None:
+    """Forget the token and everything remembered for this session."""
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
+    if message:
+        st.session_state["flash"] = message
+
+
+# ------------------------------------------------------------------ HTTP
 
 def _headers() -> dict:
     token = st.session_state.get("token")
     return {"Authorization": f"Bearer {token}"} if token else {}
 
 
-def _handle(response: httpx.Response):
-    if response.is_success:
-        return response.json() if response.content else None
-    # Our API returns {"error": {"code", "message"}}; fall back to FastAPI's {"detail": ...}
+def _error_from(response: httpx.Response) -> ApiError:
+    # Our API returns {"error": {"code", "message", "details"}}; fall back to FastAPI's {"detail": ...}
     try:
         body = response.json()
     except ValueError:
         body = {}
     error = body.get("error") or {}
     message = error.get("message") or body.get("detail") or f"Request failed ({response.status_code})"
-    raise ApiError(str(message), response.status_code)
+    return ApiError(str(message), response.status_code, error.get("code"), error.get("details"))
 
 
-def request(method: str, path: str, **kwargs):
+def _send(method: str, path: str, headers: dict | None = None, **kwargs) -> httpx.Response:
+    sent_token = is_logged_in()
     try:
         with httpx.Client(base_url=API_URL, timeout=TIMEOUT) as client:
-            response = client.request(method, path, headers=_headers(), **kwargs)
+            response = client.request(method, path, headers={**_headers(), **(headers or {})}, **kwargs)
     except httpx.ConnectError as exc:
         raise ApiError(f"Can't reach the backend at {API_URL}. Is it running?") from exc
     except httpx.TimeoutException as exc:
         raise ApiError("The backend took too long to answer. Try again.") from exc
-    return _handle(response)
+
+    if response.status_code == 401 and sent_token:
+        logout(SESSION_EXPIRED)
+        st.rerun()  # the app starts again and shows the login page with the message
+    if not response.is_success:
+        raise _error_from(response)
+    return response
+
+
+def request(method: str, path: str, **kwargs):
+    response = _send(method, path, **kwargs)
+    return response.json() if response.content else None
 
 
 def get(path: str, **params):
-    return request("GET", path, params=params or None)
+    clean = {k: v for k, v in params.items() if v not in (None, "")}  # skip empty filters
+    return request("GET", path, params=clean or None)
 
 
-def post(path: str, json: dict | None = None, files: dict | None = None):
-    return request("POST", path, json=json, files=files)
+def post(path: str, json: dict | None = None, files: dict | None = None, headers: dict | None = None):
+    return request("POST", path, json=json, files=files, headers=headers)
+
+
+def download(path: str, **params) -> bytes:
+    """Raw bytes of a file the backend produces (CSV / JSON exports)."""
+    clean = {k: v for k, v in params.items() if v not in (None, "")}
+    return _send("GET", path, params=clean or None).content
+
+
+def upload_file(file_name: str, data: bytes):
+    return post("/api/uploads", files={"file": (file_name, data, "text/csv")})
+
+
+# ------------------------------------------------------------------ login
+
+def login(email: str, password: str) -> dict:
+    """Check the password with the backend; on success remember the token and the user."""
+    body = request("POST", "/api/auth/login", json={"email": email.strip(), "password": password})
+    st.session_state["token"] = body["access_token"]
+    st.session_state["user"] = body["user"]
+    st.session_state.pop("flash", None)
+    return body["user"]
