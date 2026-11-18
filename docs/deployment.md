@@ -15,17 +15,17 @@ Free tiers only. Two Render web services built from this repository's Dockerfile
 ## 1. Supabase - create the database
 
 1. https://supabase.com -> **New project**. Choose a strong database password (save it in your password
-   manager) and a region close to the Render region in `render.yaml` (default `frankfurt` - change both if needed).
+   manager) and the region **East US (Ohio)** - the same region as the Render services (`region: ohio` in `render.yaml`).
 2. Wait until the project is ready.
 3. Click **Connect** (top of the project page) -> **Connection string** -> choose **Session pooler**.
-   - Use the **session pooler** (port **5432**, host like `aws-0-<region>.pooler.supabase.com`, user
+   - Use the **session pooler** (port **5432**, host like `aws-0-us-east-2.pooler.supabase.com` for Ohio, user
      `postgres.<project-ref>`). It works from Render (IPv4) and supports everything the app uses.
    - Do **not** use the *transaction* pooler (port 6543): it breaks session features. (The app also turns off
      psycopg's prepared statements for pooler hosts as a safety net.)
    - The *direct* connection (`db.<ref>.supabase.co`) is IPv6-only on the free plan and may not be reachable from
      Render.
 4. Copy the string and replace `[YOUR-PASSWORD]` with your database password. It looks like
-   `postgresql://postgres.abcdefgh:<password>@aws-0-eu-central-1.pooler.supabase.com:5432/postgres`
+   `postgresql://postgres.abcdefgh:<password>@aws-0-us-east-2.pooler.supabase.com:5432/postgres`
    - You can paste it exactly like that: the app turns `postgresql://` into `postgresql+psycopg://` and adds
      `sslmode=require` for Supabase hosts automatically. (Writing `postgresql+psycopg://...?sslmode=require`
      yourself is also fine.)
@@ -52,7 +52,7 @@ Free tiers only. Two Render web services built from this repository's Dockerfile
    `GROQ_MODEL=openai/gpt-oss-120b`, `WORKER_CONCURRENCY=1`, `LOG_JSON=true`, `LOG_LEVEL=INFO`,
    `CORS_ORIGINS=https://bep-ui.onrender.com`, `SEED_REVIEWER_EMAIL`, `SEED_VIEWER_EMAIL`; and for **bep-ui**:
    `API_URL=https://bep-api.onrender.com`.
-4. Click **Apply**. Render builds both images (first build ~5-10 minutes).
+4. Click **Apply**. Render builds both images (first build ~5-10 minutes). Both services run in **Ohio** on the **free** plan; Docker paths are set from the repo root (`./backend/Dockerfile` with context `./backend`, `./frontend/Dockerfile` with context `./frontend`).
 
 ## 3. Deploy order and URLs
 

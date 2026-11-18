@@ -11,9 +11,11 @@ services:
     name: bep-api
     runtime: docker
     plan: free
-    region: frankfurt          # pick the region closest to your Supabase project
+    region: ohio               # same region as the Supabase project (East US - Ohio)
     rootDir: backend
-    dockerfilePath: ./Dockerfile
+    # Paths are relative to the REPO ROOT (Render Blueprint spec), not to rootDir
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
     healthCheckPath: /health
     autoDeploy: true
     envVars:
@@ -58,9 +60,10 @@ services:
     name: bep-ui
     runtime: docker
     plan: free
-    region: frankfurt
+    region: ohio
     rootDir: frontend
-    dockerfilePath: ./Dockerfile
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: ./frontend
     healthCheckPath: /_stcore/health
     autoDeploy: true
     envVars:
