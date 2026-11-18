@@ -7,7 +7,8 @@ import api_client
 import ui
 from api_client import ApiError
 
-st.title("Add companies")
+ui.page_header("Add companies", "Add one website or upload a CSV, then start research. Duplicates are detected "
+                                "by website domain.")
 
 if not api_client.is_reviewer():
     st.info("Only reviewers can add companies or start research.")
@@ -23,9 +24,10 @@ SAMPLE_CSV = (
 # ------------------------------------------------------------------ one website
 st.subheader("One website")
 with st.form("single", clear_on_submit=True):
-    name = st.text_input("Company name")
-    website = st.text_input("Website", placeholder="https://www.example.com")
-    add = st.form_submit_button("Add company", type="primary")
+    c1, c2 = st.columns(2)
+    name = c1.text_input("Company name")
+    website = c2.text_input("Website", placeholder="https://www.example.com")
+    add = st.form_submit_button("Add company", type="primary", icon=":material/add:")
 if add:
     try:
         with st.spinner("Saving..."):

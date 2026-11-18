@@ -3,15 +3,18 @@
 The UI never connects to the database directly: it calls the FastAPI backend over HTTP
 and shows the JSON it gets back.
 
-Login: the token from POST /api/auth/login is kept in st.session_state (this browser tab
-only, never on disk) and sent as "Authorization: Bearer <token>". If the backend answers
-401 to a logged-in request (token expired or account disabled), we log out and send the
-user back to the login page with a message.
+Login: the token from POST /api/auth/login is kept in st.session_state and in a browser
+cookie (browser_session.py), so a page refresh keeps you logged in. It is sent as
+"Authorization: Bearer <token>". If the backend answers 401 to a logged-in request (token
+expired or account disabled), we log out, delete the cookie and send the user back to the
+login page with a message.
 """
 import os
 
 import httpx
 import streamlit as st
+
+import browser_session
 
 API_URL = os.environ.get("API_URL", "http://localhost:8000").rstrip("/")
 TIMEOUT = httpx.Timeout(15.0)
@@ -41,11 +44,35 @@ def is_reviewer() -> bool:
 
 
 def logout(message: str | None = None) -> None:
-    """Forget the token and everything remembered for this session."""
+    """Forget the token and everything remembered for this session, and delete the browser cookie."""
     for key in list(st.session_state.keys()):
         del st.session_state[key]
+    # This session already looked at the cookie: don't log in again from the (stale) cookie the browser
+    # sent when the page was opened.
+    st.session_state["cookie_checked"] = True
+    browser_session.queue_delete()
     if message:
         st.session_state["flash"] = message
+
+
+def restore_from_cookie() -> None:
+    """Once per browser session (= after every refresh): log in again with the token cookie, if valid."""
+    if is_logged_in() or st.session_state.get("cookie_checked"):
+        return
+    st.session_state["cookie_checked"] = True
+    token = browser_session.read_token()
+    if not token:
+        return
+    try:
+        with httpx.Client(base_url=API_URL, timeout=TIMEOUT) as client:
+            response = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+    except httpx.HTTPError:
+        return  # backend unreachable: show the login page; the cookie is kept for the next try
+    if response.status_code == 200:
+        st.session_state["token"] = token
+        st.session_state["user"] = response.json()
+    elif response.status_code == 401:
+        logout(SESSION_EXPIRED)  # expired / revoked: delete the cookie, show the login page with a message
 
 
 # ------------------------------------------------------------------ HTTP
@@ -115,5 +142,7 @@ def login(email: str, password: str) -> dict:
     body = request("POST", "/api/auth/login", json={"email": email.strip(), "password": password})
     st.session_state["token"] = body["access_token"]
     st.session_state["user"] = body["user"]
+    st.session_state["cookie_checked"] = True
     st.session_state.pop("flash", None)
+    browser_session.queue_save(body["access_token"], int(body.get("expires_in") or 8 * 3600))
     return body["user"]

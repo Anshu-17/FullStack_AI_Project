@@ -43,7 +43,7 @@ Honest list, from the decision log and the evidence. Most important first.
 | Free Render: API + worker in one container, sleeps when idle | jobs only progress while the service is awake; ~1 min cold start | separate always-on worker service |
 | `docker compose` never run (no Docker on the dev machine); images are built only by Render | local container setup unverified | build in CI |
 | Single organisation, no user-management screens | users come from the seed | tenant id + Supabase row-level security; admin screens |
-| Token only in the Streamlit session; no refresh / revocation | closing the tab logs you out; disabling the user is the way to cut access | refresh tokens, server-side session list |
+| Login token in a JavaScript-written cookie (not HttpOnly); no refresh tokens / server-side revocation | a script on the page could read the token; logout deletes the cookie but the JWT stays valid until it expires (8 h); disabling the user is the way to cut access | HttpOnly server-set session cookie, refresh tokens, server-side session list |
 | Company list / export filter on final answers in Python | fine for thousands of companies, slow for millions | SQL view / materialised table of final answers |
 | CRM integration | not built | see `docs/crm-mapping.md` |
 | Retention | not automated | see `docs/privacy.md` |

@@ -2,25 +2,36 @@
 
 Progress always comes from the server (finished jobs / total), never estimated in the browser.
 """
+import pandas as pd
 import streamlit as st
 
 import api_client
 import ui
 from api_client import ApiError
 
-st.title("Runs")
+ui.page_header("Runs", "Research runs and their jobs. Progress comes from the server and refreshes every 3 s "
+                       "while a run is active.")
 
 runs = ui.load("runs", api_client.get, "/api/runs", page_size=50)["items"]
 if not runs:
     st.info("No runs yet. Start one from 'Add companies' or a company's Rescan button.")
     st.stop()
 
-st.dataframe([{"run": r["id"], "status": r["status"], "progress": f"{r['progress']['done']}/{r['progress']['total']}",
-               "created": ui.when(r["created_at"])} for r in runs], hide_index=True)
+st.dataframe([{"run": r["id"], "status": r["status"].replace("_", " "), "progress": r["progress"]["percent"] / 100,
+               "done": f"{r['progress']['done']}/{r['progress']['total']}", "created": ui.when(r["created_at"])}
+              for r in runs], hide_index=True, width="stretch", height=230,
+             column_config={"progress": st.column_config.ProgressColumn("progress", min_value=0, max_value=1,
+                                                                        format="percent")})
+
+
+def failed_row_style(row: pd.Series) -> list[str]:
+    """Failed jobs stand out (light red, dark red text: 6.96:1 contrast)."""
+    colour = "background-color: #F8DAD7; color: #8C1D13" if row["status"] == "failed" else ""
+    return [colour] * len(row)
 
 ids = [r["id"] for r in runs]
 wanted = st.session_state.get("run_id")
-run_id = st.selectbox("Run", ids, index=ids.index(wanted) if wanted in ids else 0, format_func=lambda i: f"Run {i}")
+run_id = st.selectbox("Run", ids, index=ids.index(wanted) if wanted in ids else 0, format_func=lambda i: f"Run #{i}")
 st.session_state["run_id"] = run_id
 
 
@@ -39,12 +50,13 @@ def show_run(run_id: int) -> None:
     active = run["status"] in ui.ACTIVE_RUN
 
     progress = run["progress"]
-    st.progress(progress["percent"] / 100, text=f"Run {run_id}: **{run['status']}** — "
-                                                 f"{progress['done']} of {progress['total']} finished")
-    counts = {k: v for k, v in run["counts"].items() if v}
-    st.caption(" · ".join(f"{k}: {v}" for k, v in counts.items()) + (" · refreshing every 3 s" if active else ""))
-    if run["skipped"]:
-        st.caption(f"Skipped when started: {len(run['skipped'])} (already in progress or unknown)")
+    with st.container(border=True):
+        st.progress(progress["percent"] / 100, text=f"Run #{run_id}: **{run['status'].replace('_', ' ')}** — "
+                                                     f"{progress['done']} of {progress['total']} finished")
+        ui.html_block(ui.pills(run["counts"]) + (' <span class="bep-muted">· refreshing every 3 s</span>'
+                                                 if active else ""))
+        if run["skipped"]:
+            st.caption(f"Skipped when started: {len(run['skipped'])} (already in progress or unknown)")
 
     if api_client.is_reviewer():
         b1, b2 = st.columns(2)
@@ -56,10 +68,18 @@ def show_run(run_id: int) -> None:
             act("Retry failed", f"/api/runs/{run_id}/retry-failed")
             st.rerun()
 
-    st.dataframe([{"job": i["job_id"], "company": i["company_name"], "status": i["status"],
-                   "attempts": f"{i['attempt_count']}/{i['max_attempts']}", "error": i["last_error_code"] or "",
-                   "message": i["last_error_message"] or "", "finished": ui.when(i["finished_at"])}
-                  for i in items], hide_index=True, width="stretch")
+    table = pd.DataFrame([{"job": i["job_id"], "company": i["company_name"], "status": i["status"],
+                           "attempts": f"{i['attempt_count']}/{i['max_attempts']}", "error": i["last_error_code"] or "",
+                           "message": i["last_error_message"] or "", "finished": ui.when(i["finished_at"])}
+                          for i in items])
+    if table.empty:
+        st.info("This run has no jobs.")
+    else:
+        st.dataframe(table.style.apply(failed_row_style, axis=1), hide_index=True, width="stretch")
+        for i in items:
+            if i["status"] == "failed":
+                st.error(f"**{i['company_name']}** failed: `{i['last_error_code'] or 'error'}` — "
+                         f"{i['last_error_message'] or 'no details'}", icon=":material/error:")
 
     # The page outside this fragment shows the run as "active"; once it finishes, redraw everything
     # once so the 3-second refresh stops.

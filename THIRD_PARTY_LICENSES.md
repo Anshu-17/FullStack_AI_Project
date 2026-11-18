@@ -120,6 +120,7 @@ metadata is the package authors' own statement - check the package for the autho
 | certifi | 2026.10.23 | Mozilla Public License 2.0 (MPL 2.0) |
 | charset-normalizer | 3.5.2 | MIT |
 | click | 8.5.1 | BSD-3-Clause |
+| extra-streamlit-components | 0.1.81 | MIT License (classifier; the `License` field says UNKNOWN) |
 | h11 | 0.16.0 | MIT License |
 | httpcore | 1.0.9 | BSD-3-Clause |
 | httpx | 0.28.1 | BSD License |

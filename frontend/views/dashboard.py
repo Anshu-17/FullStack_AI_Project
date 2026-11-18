@@ -5,7 +5,7 @@ import api_client
 import ui
 from api_client import ApiError
 
-st.title("Dashboard")
+ui.page_header("Dashboard", "Live numbers from the backend: companies, research runs, outcomes and AI usage.")
 
 try:
     with st.spinner("Loading..."):
@@ -18,48 +18,62 @@ except ApiError as exc:
 
 st.success(f"Backend connected · database {ready['database']} · migration {ready['migration']}")
 
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("Companies", metrics["companies"])
-c2.metric("Runs", metrics["runs"])
-c3.metric("Answers saved", metrics["classifications"])
-c4.metric("Human corrections", metrics["overrides"])
+jobs = metrics["jobs"]
+ai_calls = sum(sum(outcomes.values()) for outcomes in metrics["ai_calls"].values())
+# Main cards (they wrap onto several rows on a narrow screen)
+cards = [("Companies", metrics["companies"], None), ("Runs", metrics["runs"], None),
+         ("Completed", jobs.get("completed", 0), "Jobs finished with nothing to review"),
+         ("Needs review", jobs.get("review_required", 0), "Jobs with Possible answers, dropped quotes or conflicts"),
+         ("Failed", jobs.get("failed", 0), "Jobs that could not be researched (see Runs for the reason)"),
+         ("AI calls", ai_calls, "Every call to an AI provider, including retries")]
+for column, (label, value, help_text) in zip(st.columns(6), cards, strict=True):
+    column.metric(label, f"{value:,}", help=help_text, border=True)
 
-c5, c6, c7, c8 = st.columns(4)
-c5.metric("Retries", metrics["retries"])
+c1, c2, c3, c4, c5 = st.columns([1, 1, 1, 1, 1.5])  # the cost card is wider: "unknown" must fit
+c1.metric("Answers saved", f"{metrics['classifications']:,}", border=True)
+c2.metric("Human corrections", metrics["overrides"], border=True)
+c3.metric("Retries", metrics["retries"], border=True)
 avg = metrics["job_duration_seconds"]["avg"]
-c6.metric("Avg job time", f"{avg:.0f} s" if avg is not None else "-")
-c7.metric("AI tokens (in / out)", f"{metrics['ai_tokens']['input']:,} / {metrics['ai_tokens']['output']:,}")
+c4.metric("Avg job time", f"{avg:.0f} s" if avg is not None else "-", border=True)
 cost = metrics["est_cost_usd"]
-c8.metric("Estimated AI cost", f"${cost:.4f}" if cost is not None else "unknown",
+c5.metric("Estimated AI cost", f"${cost:.4f}" if cost is not None else "unknown", border=True,
           help="Unknown when no prices are configured (free tier). Never guessed.")
+st.caption(f"AI tokens: {metrics['ai_tokens']['input']:,} in / {metrics['ai_tokens']['output']:,} out")
 
 left, right = st.columns(2)
-with left:
+with left, st.container(border=True):
     st.subheader("Jobs by status")
-    jobs = metrics["jobs"]
     if sum(jobs.values()) == 0:
         st.info("No jobs yet. Add companies and start a run to see progress here.")
     else:
-        st.bar_chart(jobs)
-with right:
-    st.subheader("AI calls")
-    calls = metrics["ai_calls"]
-    if not calls:
+        ui.html_block(ui.pills(jobs))
+        st.bar_chart(jobs, color="#2E6B3F", height=220)
+with right, st.container(border=True):
+    st.subheader("AI calls by provider")
+    if not metrics["ai_calls"]:
         st.info("No AI calls yet.")
     else:
-        st.dataframe([{"provider": p, **outcomes} for p, outcomes in calls.items()], hide_index=True)
+        outcome_names = sorted({o for outcomes in metrics["ai_calls"].values() for o in outcomes})
+        st.dataframe([{"provider": p, **{o: outcomes.get(o, 0) for o in outcome_names}}  # 0, not "None"
+                      for p, outcomes in metrics["ai_calls"].items()], hide_index=True, width="stretch")
 
-st.subheader("Recent runs")
-if not runs["items"]:
-    st.info("No runs yet.")
-else:
-    st.dataframe([{"run": r["id"], "status": r["status"],
-                   "progress": f"{r['progress']['done']}/{r['progress']['total']}",
-                   "created": ui.when(r["created_at"])} for r in runs["items"]], hide_index=True)
-    choice = st.selectbox("Open run", [r["id"] for r in runs["items"]], format_func=lambda i: f"Run {i}")
-    if st.button("Open run", icon=":material/open_in_new:"):
-        st.session_state["run_id"] = choice
-        st.switch_page("views/runs.py")
+with st.container(border=True):
+    st.subheader("Recent runs")
+    if not runs["items"]:
+        st.info("No runs yet.")
+    else:
+        st.dataframe([{"run": f"#{r['id']}", "status": r["status"].replace("_", " "),
+                       "progress": r["progress"]["percent"] / 100,
+                       "done": f"{r['progress']['done']} / {r['progress']['total']}",
+                       "created": ui.when(r["created_at"])} for r in runs["items"]],
+                     hide_index=True, width="stretch",
+                     column_config={"progress": st.column_config.ProgressColumn("progress", min_value=0, max_value=1,
+                                                                                format="percent")})
+        o1, o2 = st.columns([3, 1], vertical_alignment="bottom")
+        choice = o1.selectbox("Open run", [r["id"] for r in runs["items"]], format_func=lambda i: f"Run #{i}")
+        if o2.button("Open run", icon=":material/open_in_new:", width="stretch"):
+            st.session_state["run_id"] = choice
+            st.switch_page("views/runs.py")
 
-if st.button("Refresh"):
+if st.button("Refresh", icon=":material/refresh:"):
     st.rerun()

@@ -1,23 +1,35 @@
 """Companies: search and filter on the FINAL answers, open a company, start research, export."""
 import uuid
 
+import pandas as pd
 import streamlit as st
 
 import api_client
 import ui
 from api_client import ApiError
 
-st.title("Companies")
+ui.page_header("Companies", "Final answer per business line (a reviewer's correction wins). Filter, open a "
+                            "company to see its evidence, start research, export.")
 
 PAGE_SIZE = 25
 STATUS_FILTER = {"Any": None, "Yes": "yes", "Possible": "possible", "Not found": "not_found"}
 
-f1, f2, f3 = st.columns([2, 1, 1])
-search = f1.text_input("Search name or website")
-category = f2.selectbox("Category", ["Any", *ui.CATEGORIES],
-                        format_func=lambda c: c if c == "Any" else ui.CATEGORY_LABEL[c])
-status = f3.selectbox("Final answer", list(STATUS_FILTER))
-hide_test = st.checkbox("Hide test data", help="Fixture and synthetic companies used for testing")
+
+def cell_style(value: str) -> str:
+    """Colour of an answer cell: 'Yes (H) ⚠' -> green, 'Possible' -> amber, ... (same colours as the badges)."""
+    for label, (background, text) in ui.CELL_COLOURS.items():
+        if str(value).startswith(label):
+            return f"background-color: {background}; color: {text}; font-weight: 600"
+    return ""
+
+
+with st.container(border=True):
+    f1, f2, f3 = st.columns([2, 1, 1])
+    search = f1.text_input("Search name or website", placeholder="e.g. agtegra")
+    category = f2.selectbox("Category", ["Any", *ui.CATEGORIES],
+                            format_func=lambda c: c if c == "Any" else ui.CATEGORY_LABEL[c])
+    status = f3.selectbox("Final answer", list(STATUS_FILTER))
+    hide_test = st.checkbox("Hide test data", help="Fixture and synthetic companies used for testing")
 filters = {"search": search, "category": None if category == "Any" else category, "status": STATUS_FILTER[status],
            "include_test": "false" if hide_test else None}
 page = st.session_state.get("companies_page", 1)
@@ -39,8 +51,13 @@ else:
             mark = " (H)" if answer["provenance"] == "human" else ""
             row[ui.SHORT_LABEL[cat]] = ui.status_label(answer["status"]) + mark + (" ⚠" if answer["conflict"] else "")
         rows.append(row)
-    st.dataframe(rows, hide_index=True, width="stretch")
-    st.caption("(H) = corrected by a reviewer · ⚠ = the latest automated scan disagrees with the correction")
+    answer_columns = [ui.SHORT_LABEL[cat] for cat in ui.CATEGORIES]
+    styled = pd.DataFrame(rows).style.map(cell_style, subset=answer_columns)
+    st.dataframe(styled, hide_index=True, width="stretch",
+                 column_config={"id": st.column_config.NumberColumn("id", width="small"),
+                                "data": st.column_config.TextColumn("data", help="Test data = fixture / synthetic")})
+    st.caption("(H) = corrected by a reviewer · ⚠ = the latest automated scan disagrees with the correction · "
+               "Not scanned = never researched (not the same as Not found)")
 
     pages = max(1, -(-data["total"] // PAGE_SIZE))  # ceiling division
     p1, p2, p3 = st.columns([1, 2, 1])

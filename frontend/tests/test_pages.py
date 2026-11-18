@@ -90,9 +90,22 @@ def test_detail_shows_evidence_sources_and_conflict():
     shown = texts(at)
     assert "We buy grain at our elevators." in shown
     assert "https://coop.example/grain" in shown
-    assert ":blue-badge[Website]" in shown and ":violet-badge[Rule]" in shown and ":orange-badge[Human]" in shown
+    assert 'bep-site">Website' in shown and 'bep-rule">Rule' in shown and 'bep-human">Human' in shown
     assert "Conflicts with the latest automated scan" in shown
-    assert ":gray-badge[Not scanned]" in shown  # never-scanned is NOT "Not found"
+    assert 'bep-notscanned">Not scanned' in shown  # never-scanned is NOT "Not found"
+
+
+@respx.mock
+def test_detail_escapes_website_text():
+    """A quote is untrusted website text: it must be shown as text, never as HTML."""
+    body = company_detail_body()
+    grain = next(a for a in body["answers"] if a["category"] == "grain")
+    grain["automated"]["evidence"][0]["quote"] = '<img src=x onerror="alert(1)"> We buy grain.'
+    respx.get(f"{API_URL}/api/companies/7").respond(200, json=body)
+    respx.get(f"{API_URL}/api/companies/7/overrides").respond(200, json={"items": []})
+    shown = texts(page("../views/company_detail.py", VIEWER, company_id=7).run())
+    assert "&lt;img src=x onerror=&quot;alert(1)&quot;&gt; We buy grain." in shown
+    assert "<img src=x" not in shown
 
 
 @respx.mock

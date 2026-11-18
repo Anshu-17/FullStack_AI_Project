@@ -26,6 +26,8 @@ click==8.5.1
     # via
     #   streamlit
     #   uvicorn
+extra-streamlit-components==0.1.81
+    # via -r requirements.txt
 h11==0.16.0
     # via
     #   httpcore
@@ -89,7 +91,9 @@ rpds-py==2026.9.1
 starlette==1.10.0
     # via streamlit
 streamlit==1.67.0
-    # via -r requirements.txt
+    # via
+    #   -r requirements.txt
+    #   extra-streamlit-components
 typing-extensions==4.16.0
     # via
     #   altair

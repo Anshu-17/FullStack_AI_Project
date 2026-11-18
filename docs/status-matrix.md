@@ -40,7 +40,9 @@ The brief itself is not stored in this repository. Status values are the brief's
 | Progress from server state | Built and proven | `test_run_page_shows_server_progress_and_errors` | refreshes every 3 s |
 | Site / rule / human / test-fixture results clearly distinguished | Built and proven | `test_test_data_is_badged_and_can_be_hidden`, `test_detail_shows_evidence_sources_and_conflict` | |
 | Visible validation errors, no exposed secrets | Built and proven | `test_login_failure_shows_the_error`, upload rejected-row table | the UI never sees API keys |
-| Responsive layout | Built but unverified | - | Streamlit default layout; not checked on a phone |
+| Responsive layout | Built and proven | [ui_screenshots](evidence/ui_screenshots/) (1366 px and 390 px) | cards / columns stack on a phone; wide tables scroll inside their frame |
+| Stay logged in across a browser refresh | Built and proven | `frontend/tests/test_session_cookie.py` | JWT in a Secure, SameSite=Strict cookie; not HttpOnly (trade-off in design.md) |
+| Readable contrast (WCAG AA) | Built and proven | `frontend/.streamlit/config.toml`, `frontend/ui.py` | all text / badge pairs >= 6.4:1 (computed) |
 | Keyboard-usable actions | Built but unverified | - | standard Streamlit widgets; no accessibility audit |
 
 ## 4.2 Backend APIs and persistence

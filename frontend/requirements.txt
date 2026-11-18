@@ -1,3 +1,4 @@
 # Streamlit frontend (separate service; talks to the FastAPI backend over HTTP)
 streamlit==1.67.0                     # the web UI: pages, tables, upload, download, auto-refresh
 httpx==0.28.1                         # calls the FastAPI backend
+extra-streamlit-components==0.1.81    # CookieManager: keeps the login token in a browser cookie (stay logged in on refresh)

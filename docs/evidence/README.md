@@ -39,6 +39,7 @@ The brief requires A-E to be demonstrated and F-J tested or design-explained.
 | [metrics_snapshot.md](metrics_snapshot.md) | **Latency / cost** - `GET /api/metrics` after all runs (retries, durations, AI calls / tokens; cost "unknown", never estimated) | Mixed (REAL + FIXTURE + SYNTHETIC totals) |
 | [hour2_classifier.md](hour2_classifier.md) | evidence-backed classification on a real site; forced and real-world Gemini -> Groq fallback | REAL (agtegra.com) |
 | [crawl_coverage_improvement.md](crawl_coverage_improvement.md) | live-site finding fixed: Agfinity gas station / retail missed by the 8-page crawl; before / after with sitemap discovery + category-balanced selection; Agtegra regression check | REAL (2 websites, gemini-2.5-flash-lite) |
+| [ui_screenshots/](ui_screenshots/) | UI after the polish: login, dashboard, companies, company detail, runs at 1366 px; companies + detail at 390 px (phone). Local API + local database; no passwords shown | REAL local data (incl. labelled test data) |
 | [deployment_smoke_test.md](deployment_smoke_test.md) | live deployment: `/health`, `/ready` (database + migration), UI 200, 401 without login; author's manual login + real run | REAL (Render + Supabase) |
 | [test_coverage.md](test_coverage.md) | 250 backend tests passing, 88 % line coverage, per critical module | TEST |
 

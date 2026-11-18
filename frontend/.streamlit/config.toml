@@ -1,0 +1,17 @@
+# Streamlit theme: calm agricultural / professional look. Contrast checked for WCAG AA:
+# text #1F2A22 on background #FAF8F3 = 14.0:1; white on primary #2E6B3F = 6.4:1; links #245C36 on background
+# = 7.4:1. Badge / pill colours in ui.py are 6.4:1 or better.
+[theme]
+base = "light"
+primaryColor = "#2E6B3F"              # deep green: buttons, links, focus
+backgroundColor = "#FAF8F3"           # warm off-white
+secondaryBackgroundColor = "#EFEBE1"  # sidebar, inputs, cards
+textColor = "#1F2A22"
+linkColor = "#245C36"
+borderColor = "#D9D3C4"
+font = "sans-serif"
+baseRadius = "0.6rem"
+showWidgetBorder = true
+
+[client]
+toolbarMode = "minimal"   # hide developer menu items for end users
