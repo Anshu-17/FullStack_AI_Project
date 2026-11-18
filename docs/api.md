@@ -1,6 +1,6 @@
 # API
 
-Base URL: `http://localhost:8000` locally, `https://<bep-api>.onrender.com` when deployed. Interactive docs (OpenAPI /
+Base URL: `http://localhost:8000` locally, **https://bep-api.onrender.com** live. Interactive docs (OpenAPI /
 Swagger): **`/docs`**; machine-readable spec: **`/openapi.json`** (exported copy: [`docs/openapi.json`](openapi.json)).
 
 ## Authentication

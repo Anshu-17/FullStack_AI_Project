@@ -1,11 +1,22 @@
 # Deployment: Supabase (database) + Render (API + UI)
 
-Free tiers only. Two Render web services built from this repository's Dockerfiles:
+Free tiers only. Two Render web services built from this repository's Dockerfiles. **Live since 2026-11-18**
+(smoke test: [evidence/deployment_smoke_test.md](evidence/deployment_smoke_test.md)):
 
-| Service | Folder | What runs in it | Public URL (if the name is free) |
+| Service | Folder | What runs in it | Live URL |
 |---|---|---|---|
-| `bep-api` | `backend/` | `start.sh`: migrations -> seed -> worker (background, auto-restart) -> API on `$PORT` | `https://bep-api.onrender.com` |
-| `bep-ui` | `frontend/` | Streamlit on `$PORT`, calls the API over HTTPS (never the database) | `https://bep-ui.onrender.com` |
+| `bep-api` | `backend/` | `start.sh`: migrations -> seed -> worker (background, auto-restart) -> API on `$PORT` | https://bep-api.onrender.com (docs: `/docs`) |
+| `bep-ui` | `frontend/` | Streamlit on `$PORT`, calls the API over HTTPS (never the database) | https://bep-ui-1dt0.onrender.com |
+
+**Three things learned while deploying:**
+
+1. **Supabase: use the SESSION pooler.** The direct connection (`db.<ref>.supabase.co`) is IPv6-only and not
+   reachable from Render; the session pooler (port 5432) works.
+2. **Supabase Data API is disabled.** FastAPI is the only path to the database (no PostgREST access to the tables
+   with the public anon key).
+3. **Render resolves `dockerfilePath` / `dockerContext` relative to `rootDir`.** With `rootDir: backend` the paths
+   are `./Dockerfile` and `.` (the earlier `./backend/Dockerfile` was shown as `backend/ ./backend/Dockerfile`,
+   i.e. it pointed at `backend/backend/Dockerfile`, which does not exist).
 
 > **Honest trade-off.** Render background workers are not free and free web services sleep after ~15 minutes
 > without traffic, so the worker runs INSIDE the API container and sleeps with it. Jobs only progress while
@@ -22,15 +33,17 @@ Free tiers only. Two Render web services built from this repository's Dockerfile
      `postgres.<project-ref>`). It works from Render (IPv4) and supports everything the app uses.
    - Do **not** use the *transaction* pooler (port 6543): it breaks session features. (The app also turns off
      psycopg's prepared statements for pooler hosts as a safety net.)
-   - The *direct* connection (`db.<ref>.supabase.co`) is IPv6-only on the free plan and may not be reachable from
-     Render.
+   - The *direct* connection (`db.<ref>.supabase.co`) is IPv6-only and is not reachable from Render - confirmed
+     during the real deployment.
 4. Copy the string and replace `[YOUR-PASSWORD]` with your database password. It looks like
    `postgresql://postgres.abcdefgh:<password>@aws-0-us-east-2.pooler.supabase.com:5432/postgres`
    - You can paste it exactly like that: the app turns `postgresql://` into `postgresql+psycopg://` and adds
      `sslmode=require` for Supabase hosts automatically. (Writing `postgresql+psycopg://...?sslmode=require`
      yourself is also fine.)
    - If the password contains special characters (`@ : / ? # %`), URL-encode them (e.g. `@` -> `%40`).
-5. Nothing else to do in Supabase: the API creates the tables itself on first start (`alembic upgrade head`).
+5. **Disable the Data API** (Project Settings -> Data API): the app never uses it, and FastAPI must be the only
+   path to the database.
+6. Nothing else to do in Supabase: the API creates the tables itself on first start (`alembic upgrade head`).
 
 ## 2. Render - create the services from the Blueprint
 
@@ -40,7 +53,7 @@ Free tiers only. Two Render web services built from this repository's Dockerfile
 
 | Variable | What to enter |
 |---|---|
-| `DATABASE_URL` | the Supabase **session pooler** string from step 1.4 |
+| `DATABASE_URL` | the Supabase **session pooler** string from step 1.4 (not the direct connection) |
 | `JWT_SECRET` | a new random string: run `python -c "import secrets; print(secrets.token_urlsafe(48))"` (>= 32 characters - the API refuses to start otherwise) |
 | `GOOGLE_API_KEY` | your Gemini key (Google AI Studio) |
 | `GROQ_API_KEY` | your Groq key |
@@ -50,18 +63,20 @@ Free tiers only. Two Render web services built from this repository's Dockerfile
    Plain values (already in `render.yaml`, change in the dashboard if needed): `ENVIRONMENT=production`,
    `AI_PROVIDER=google`, `AI_FALLBACK_PROVIDERS=groq`, `GOOGLE_MODEL=gemini-2.5-flash`,
    `GROQ_MODEL=openai/gpt-oss-120b`, `WORKER_CONCURRENCY=1`, `LOG_JSON=true`, `LOG_LEVEL=INFO`,
-   `CORS_ORIGINS=https://bep-ui.onrender.com`, `SEED_REVIEWER_EMAIL`, `SEED_VIEWER_EMAIL`; and for **bep-ui**:
+   `CORS_ORIGINS=https://bep-ui-1dt0.onrender.com`, `SEED_REVIEWER_EMAIL`, `SEED_VIEWER_EMAIL`; and for **bep-ui**:
    `API_URL=https://bep-api.onrender.com`.
-4. Click **Apply**. Render builds both images (first build ~5-10 minutes). Both services run in **Ohio** on the **free** plan; Docker paths are set from the repo root (`./backend/Dockerfile` with context `./backend`, `./frontend/Dockerfile` with context `./frontend`).
+4. Click **Apply**. Render builds both images (first build ~5-10 minutes). Both services run in **Ohio** on the
+   **free** plan. Docker paths are **relative to each service's `rootDir`**: `dockerfilePath: ./Dockerfile`,
+   `dockerContext: .` (the dashboard shows them as `backend/ ./Dockerfile`).
 
 ## 3. Deploy order and URLs
 
 1. **bep-api first.** Wait until its status is **Live**. Its logs should show:
    `start: applying database migrations` -> Alembic upgrades -> `policy v1 created` / `user ... created` ->
    `worker.started` -> `Uvicorn running`.
-2. Note the API's real URL (dashboard, top of the service). If it is NOT `https://bep-api.onrender.com`
-   (name taken), open **bep-ui -> Environment**, set `API_URL` to the real API URL, and **save** (redeploys the UI).
-   Likewise set `CORS_ORIGINS` on bep-api to the UI's real URL.
+2. Note the real URLs (dashboard, top of each service). Render may add a suffix when a name is taken - the UI
+   became `https://bep-ui-1dt0.onrender.com`. Set `API_URL` on bep-ui to the real API URL and `CORS_ORIGINS` on
+   bep-api to the real UI URL (dashboard -> Environment -> save; also update `render.yaml`).
 3. **bep-ui**: wait until Live.
 
 ## 4. Check it works
@@ -71,8 +86,8 @@ Free tiers only. Two Render web services built from this repository's Dockerfile
 | process up | `https://bep-api.onrender.com/health` | `{"status": "ok"}` |
 | database + migrations | `https://bep-api.onrender.com/ready` | `{"status": "ready", "database": "ok", "migration": "13822ee21a66"}` |
 | API docs | `https://bep-api.onrender.com/docs` | Swagger page |
-| UI | `https://bep-ui.onrender.com` | login page |
-| UI health | `https://bep-ui.onrender.com/_stcore/health` | `ok` |
+| UI | `https://bep-ui-1dt0.onrender.com` | login page |
+| UI health | `https://bep-ui-1dt0.onrender.com/_stcore/health` | `ok` |
 
 The first request after a sleep takes ~1 minute (cold start) - wait and reload.
 
@@ -108,5 +123,5 @@ The first request after a sleep takes ~1 minute (cold start) - wait and reload.
 ## 7. Local equivalent
 
 `docker compose up --build` runs the same images locally with a local Postgres (the API and the worker as
-separate services). Note: the Docker images were not built on the development machine (Docker is not installed
-there); the first real build is Render's.
+separate services). Note: Docker is not installed on the development machine; the images have been built and run
+by Render (live), but `docker compose` itself has not been run.

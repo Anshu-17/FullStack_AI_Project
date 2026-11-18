@@ -5,6 +5,16 @@
     "description": "Researches company websites and stores evidence-backed business-line classifications.",
     "version": "0.1.0"
   },
+  "servers": [
+    {
+      "url": "https://bep-api.onrender.com",
+      "description": "Live (Render)"
+    },
+    {
+      "url": "http://localhost:8000",
+      "description": "Local development"
+    }
+  ],
   "paths": {
     "/api/auth/login": {
       "post": {

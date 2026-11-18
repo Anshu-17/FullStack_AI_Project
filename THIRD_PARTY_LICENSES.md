@@ -14,7 +14,8 @@ metadata is the package authors' own statement - check the package for the autho
   files; used unmodified.
 - External services (not dependencies): Google Gemini API, Groq API, Supabase, Render - used under their own terms
   of service with the author's free-tier accounts.
-- This project itself has no LICENSE file yet. **[AUTHOR: choose a license for your own code, or state "all rights reserved".]**
+- This project's own code is licensed under the **MIT License** - see [LICENSE](LICENSE) (copyright 2026 Anshuman
+  R Prasad). The dependency licenses above are all compatible with distributing it under MIT.
 
 ## Backend (`backend/requirements.lock.txt`)
 | Package | Version | License (from package metadata) |

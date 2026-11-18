@@ -158,3 +158,12 @@ Versions are pinned in `requirements.txt` (direct dependencies) and `requirement
 - **Production safety:** the seed REQUIRES `SEED_REVIEWER_PASSWORD` / `SEED_VIEWER_PASSWORD` when `ENVIRONMENT=production` and never generates or prints passwords there; worker concurrency defaults to 1 in production unless `WORKER_CONCURRENCY` is set; fixture routing, the private-host allowlist and the fake AI provider stay off in production (tested); weak `JWT_SECRET` still refuses to start.
 - **Frontend:** the Streamlit image listens on `$PORT` (Render) or 8501.
 - **Not verified locally:** Docker and a POSIX shell are not installed on the development machine, so the images and `start.sh` were not built or run here; the first build is Render's. `.gitattributes` keeps `*.sh` LF-only and the Dockerfile strips CRs as a safety net.
+
+## Deployment live (2026-11-18)
+
+- **Live:** UI https://bep-ui-1dt0.onrender.com, API https://bep-api.onrender.com (docs `/docs`). The author smoke-tested health, readiness, reviewer login and a real company run completing with evidence in the UI; `/health`, `/ready`, `/docs` and the UI were re-checked with curl (`docs/evidence/deployment_smoke_test.md`). Both images and `start.sh` now run on Render.
+- **Render path bug (my earlier fix was wrong):** commit cffeb8e set `dockerfilePath: ./backend/Dockerfile` assuming paths are relative to the repo root. With `rootDir` set, Render resolves them **relative to rootDir** (dashboard showed `backend/ ./backend/Dockerfile`, i.e. `backend/backend/Dockerfile`, which does not exist). Fixed: `dockerfilePath: ./Dockerfile`, `dockerContext: .` for both services. Lesson: the assumption about the Blueprint spec was not checked against Render's actual behaviour.
+- **Supabase SESSION pooler required:** the direct connection is IPv6-only and not reachable from Render; the session pooler (port 5432) works.
+- **Supabase Data API disabled:** FastAPI is the only path to the database (no PostgREST access with the public anon key).
+- **URL suffix:** Render named the UI `bep-ui-1dt0`; `CORS_ORIGINS` (bep-api) and `API_URL` (bep-ui) set to the real URLs, also in `render.yaml`.
+- **Licence:** MIT for the project's own code (`LICENSE`); dependency licences in `THIRD_PARTY_LICENSES.md`.

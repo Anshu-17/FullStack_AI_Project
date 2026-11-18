@@ -28,7 +28,7 @@ PowerShell terminals in the repo root:
 - Pipeline: crawl -> select passages -> prompt (untrusted tags) -> validate (verbatim quotes) -> Accounting rule ->
   fenced save. Job state machine: retries, lease recovery, cancel.
 
-## 07:00-15:00 - Live demo (deployed app **[UI URL]**)
+## 07:00-15:00 - Live demo (deployed app https://bep-ui-1dt0.onrender.com)
 
 1. Log in as reviewer. **Upload** `sample-data/real_companies.csv` (or add one URL) -> accepted / existing /
    duplicate / invalid rows with reasons.

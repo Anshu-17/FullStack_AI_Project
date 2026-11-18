@@ -12,7 +12,7 @@ leases · httpx + BeautifulSoup crawler · Gemini (primary) + Groq (fallback) ·
 
 | Built and proven | Built but unverified | Partial | Not built |
 |---|---|---|---|
-| CSV / URL intake with row-level results (1,000 rows ~1.4 s); dedup by domain; safe crawler (SSRF, robots, budgets); evidence-validated classification with Accounting rule; Possible / Not Found semantics; provider retries + fallback; worker leases, crash recovery, cancel, manual retry; idempotent runs; corrections with optimistic locking and audit trail; human-wins answers with conflict flags; search, filters, export; login + roles; rate limits; structured logs, health / readiness, metrics; reversible migrations; **scenarios A-E demonstrated, F-J tested / demonstrated**; 15-site real pilot + manual audit; 100-job synthetic workload | deployment (Render + Supabase files ready, never built or run); responsive layout and keyboard use (Streamlit defaults, no audit) | evidence relevance (audit: 66 OK / 9 weak / 3 questionable of 78 quotes); contradictory sources (prompt rule only); AI cost (tokens recorded, cost unknown on free tiers); DNS-rebinding defence (no IP pinning); multi-worker execution (one process run); AI usage statement (draft); repository licence for own code | live URLs and Loom **[until done]**; JavaScript-rendered sites; multi-tenancy; real CRM integration (mapping proposed only); user-management screens |
+| CSV / URL intake with row-level results (1,000 rows ~1.4 s); dedup by domain; safe crawler (SSRF, robots, budgets); evidence-validated classification with Accounting rule; Possible / Not Found semantics; provider retries + fallback; worker leases, crash recovery, cancel, manual retry; idempotent runs; corrections with optimistic locking and audit trail; human-wins answers with conflict flags; search, filters, export; login + roles; rate limits; structured logs, health / readiness, metrics; reversible migrations; **scenarios A-E demonstrated, F-J tested / demonstrated**; 15-site real pilot + manual audit; 100-job synthetic workload; **live deployment on Render + Supabase (smoke-tested 2026-11-18)** | responsive layout and keyboard use (Streamlit defaults, no audit) | evidence relevance (audit: 66 OK / 9 weak / 3 questionable of 78 quotes); contradictory sources (prompt rule only); AI cost (tokens recorded, cost unknown on free tiers); DNS-rebinding defence (no IP pinning); multi-worker execution (one process run); AI usage statement (draft) | Loom **[until recorded]**; JavaScript-rendered sites; multi-tenancy; real CRM integration (mapping proposed only); user-management screens |
 
 ## Key numbers (all from real runs - [evidence/README.md](evidence/README.md))
 
@@ -27,8 +27,8 @@ leases · httpx + BeautifulSoup crawler · Gemini (primary) + Groq (fallback) ·
 ## Top risks
 
 1. **Free-tier AI quotas** (Gemini 20 requests/model/day) stall real batches - seen in the pilot.
-2. **Free hosting**: API + worker share one sleeping container; jobs only progress while it is awake; first build
-   happens on Render.
+2. **Free hosting**: API + worker share one sleeping container (~512 MB); jobs only progress while it is awake;
+   ~1 minute cold start.
 3. **Accuracy on unseen sites is unmeasured** (no held-out labelled set); the Groq fallback is weaker.
 
 ## Next three priorities
@@ -39,7 +39,7 @@ leases · httpx + BeautifulSoup crawler · Gemini (primary) + Groq (fallback) ·
 
 ## Submission message (brief section 15)
 
-1. Frontend: **[UI URL]**  2. Backend / API: **[API URL]** (docs: **[API URL]/docs**)
+1. Frontend: https://bep-ui-1dt0.onrender.com  2. Backend / API: https://bep-api.onrender.com (docs: https://bep-api.onrender.com/docs)
 3. Repository: https://github.com/Anshu-17/FullStack_AI_Project  4. Loom: **[LOOM URL]**
 5. Documentation: `README.md` + `docs/`  6. Test / run evidence: `docs/evidence/README.md`
 7. Status matrix: this page + `docs/status-matrix.md`

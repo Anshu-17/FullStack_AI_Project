@@ -95,7 +95,7 @@ The brief itself is not stored in this repository. Status values are the brief's
 | Secret handling, validation, authorisation, safe URL retrieval, rate limiting | Built and proven | `tests/test_auth.py`, `tests/test_production.py`, [scenario_D](evidence/scenario_D_ssrf_and_injection.md) | rate limits per API process (in memory) |
 | Structured logs with correlation / job ids, error categories, attempts, timestamps, no secrets | Built and proven | [scenario_A](evidence/scenario_A_worker_crash.md) log lines | |
 | Health / readiness endpoints, migration plan, safe restart | Built and proven | `/health`, `/ready`, [scenario_J](evidence/scenario_J_migration.md), [scenario_A](evidence/scenario_A_worker_crash.md) | |
-| Deployment instructions | Built but unverified | [deployment.md](deployment.md), `render.yaml` | not deployed yet; Docker images never built locally |
+| Deployment instructions + files | Built and proven | [deployment.md](deployment.md), `render.yaml`, [deployment_smoke_test.md](evidence/deployment_smoke_test.md) | live on Render + Supabase since 2026-11-18; `docker compose` not run locally |
 | Metrics: throughput, per-job latency, outcomes, retries | Built and proven | [metrics_snapshot.md](evidence/metrics_snapshot.md) | |
 | Metrics: estimated AI usage / cost | Partial | [metrics_snapshot.md](evidence/metrics_snapshot.md) | tokens per call recorded; cost "unknown" because no prices are configured (free tier) - set `AI_PRICE_*` to estimate |
 | Privacy / retention boundaries, rules for page excerpts | Built and proven | [privacy.md](privacy.md) | retention is a proposal, not automated |
@@ -152,9 +152,9 @@ The brief itself is not stored in this repository. Status values are the brief's
 
 | # | Artifact | Status | Where / notes |
 |---|---|---|---|
-| 1 | Live deployed demo + test credentials | Not built yet | [deployment.md](deployment.md); **[fill URLs after deploying]**; credentials shared privately |
-| 2 | Repository: source, history, setup, sample `.env`, lockfiles, dependency license notes | Partial | `backend/.env.example`, `*/requirements.lock.txt`, [THIRD_PARTY_LICENSES.md](../THIRD_PARTY_LICENSES.md); **no LICENSE for the project's own code yet** |
-| 3 | README / runbook: prerequisites, commands, deploy URLs, env vars, DB setup, worker, migrations, sample input | Built and proven | [README.md](../README.md) (deploy URLs are placeholders) |
+| 1 | Live deployed demo + test credentials | Built and proven | UI https://bep-ui-1dt0.onrender.com, API https://bep-api.onrender.com; author's smoke test 2026-11-18 (health, ready, reviewer login, real company run with evidence) + [deployment_smoke_test.md](evidence/deployment_smoke_test.md); credentials shared privately |
+| 2 | Repository: source, history, setup, sample `.env`, lockfiles, dependency license notes | Built and proven | `backend/.env.example`, `*/requirements.lock.txt`, [LICENSE](../LICENSE) (MIT, own code), [THIRD_PARTY_LICENSES.md](../THIRD_PARTY_LICENSES.md) |
+| 3 | README / runbook: prerequisites, commands, deploy URLs, env vars, DB setup, worker, migrations, sample input | Built and proven | [README.md](../README.md) |
 | 4 | Technical design incl. trust boundaries, security, failure handling, scaling, trade-offs | Built and proven | [design.md](design.md) |
 | 5 | API specification with examples, response / error formats, auth | Built and proven | [api.md](api.md), [openapi.json](openapi.json) |
 | 6 | Tests / evidence: tests, outcomes, coverage, sample data, failure-injection artifacts, metrics | Built and proven | [evidence/README.md](evidence/README.md), [test_coverage.md](evidence/test_coverage.md) |

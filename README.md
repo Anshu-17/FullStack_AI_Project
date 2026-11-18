@@ -6,7 +6,8 @@ business lines (Accounting, Agronomy, Grain, Energy, Feed, Gas Station, Retail S
 (the human answer wins, with full history and conflict flags) and export CSV / JSON. Built with Python, FastAPI,
 PostgreSQL, a lease-based background worker, Gemini + Groq, and a Streamlit UI.
 
-**Live:** UI **[UI URL]** · API **[API URL]** · API docs **[API URL]/docs** - log in as `reviewer@demo.local` or
+**Live:** UI https://bep-ui-1dt0.onrender.com · API https://bep-api.onrender.com · API docs
+https://bep-api.onrender.com/docs - log in as `reviewer@demo.local` or
 `viewer@demo.local` (passwords shared privately). Free hosting sleeps when idle: the first load can take ~1 minute.
 
 **Start here:** [docs/submission-summary.md](docs/submission-summary.md) (one page) ·
@@ -78,8 +79,8 @@ docker compose up --build                   # Postgres + API (runs migrations) +
 docker compose exec api python -m app.db.seed
 ```
 
-UI http://localhost:8501 · API http://localhost:8000/docs. (The compose file and Dockerfiles were written without
-Docker on the development machine; the first real image build is Render's - see `docs/deployment.md`.)
+UI http://localhost:8501 · API http://localhost:8000/docs. (The Dockerfiles are built and running on Render; the
+compose file itself has not been run, as Docker is not installed on the development machine.)
 
 ## Deploy
 

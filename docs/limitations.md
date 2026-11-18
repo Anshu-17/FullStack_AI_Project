@@ -38,8 +38,7 @@ Honest list, from the decision log and the evidence. Most important first.
 |---|---|---|
 | One worker process (threads); not run distributed | throughput bounded; distributed safety tested only with two claimers in one process | several worker processes / machines + shared rate limiter |
 | Free Render: API + worker in one container, sleeps when idle | jobs only progress while the service is awake; ~1 min cold start | separate always-on worker service |
-| Docker images and `start.sh` never built / run locally (no Docker on the dev machine) | first real build is on Render | build in CI |
-| Not deployed yet | no live URLs | follow `docs/deployment.md` |
+| `docker compose` never run (no Docker on the dev machine); images are built only by Render | local container setup unverified | build in CI |
 | Single organisation, no user-management screens | users come from the seed | tenant id + Supabase row-level security; admin screens |
 | Token only in the Streamlit session; no refresh / revocation | closing the tab logs you out; disabling the user is the way to cut access | refresh tokens, server-side session list |
 | Company list / export filter on final answers in Python | fine for thousands of companies, slow for millions | SQL view / materialised table of final answers |
