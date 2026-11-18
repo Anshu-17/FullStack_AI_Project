@@ -51,6 +51,20 @@ streamlit run app.py                                    # http://localhost:8501
 ```
 Set `API_URL` if the backend is not on `http://localhost:8000`.
 
+## Logging in
+
+Everything except `/health`, `/ready` and the API docs needs a login.
+
+- `python -m app.db.seed` (in `backend/`) creates two demo accounts:
+  - `reviewer@demo.local` - can add companies, start / cancel / retry runs and correct answers
+  - `viewer@demo.local` - can read everything and export
+- Passwords: set `SEED_REVIEWER_PASSWORD` / `SEED_VIEWER_PASSWORD` in `backend/.env` before seeding, or leave
+  them blank and the seed prints random ones **once**. They are shared privately, never committed.
+- Streamlit (http://localhost:8501) shows a login page; the API docs (http://localhost:8000/docs) have an
+  "Authorize" button - get a token with `POST /api/auth/login`.
+- In production (`ENVIRONMENT=production`) the API refuses to start unless `JWT_SECRET` is a random string of at
+  least 32 characters.
+
 ## Background worker
 
 The API only stores requests; the worker does the crawling and AI work. Start it in its own terminal
