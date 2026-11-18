@@ -55,7 +55,9 @@ class Settings(BaseSettings):
 
     # --- Classification policy ---
     policy_version: str = "v1"
-    prompt_version: str = "p2"  # p2: quotes must be one continuous span (no "...", no stitching)
+    # p2: quotes must be one continuous span (no "...", no stitching)
+    # p3: outdated evidence ("closed in 2015") is "possible", not "not_found"
+    prompt_version: str = "p3"
 
     # --- Crawl limits (section 4.3) ---
     crawl_max_pages: int = 8                # pages per website (homepage + the most relevant links)
