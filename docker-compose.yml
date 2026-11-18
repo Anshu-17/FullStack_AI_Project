@@ -1,0 +1,58 @@
+# Local development: Postgres + API + worker with one command.
+#   docker compose up --build
+# UI: http://localhost:8501 · API docs: http://localhost:8000/docs
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: devpass   # local dev only; real deployments use a managed DB
+      POSTGRES_DB: bep
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d bep"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build: ./backend
+    env_file: ./backend/.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:devpass@db:5432/bep
+    # Apply migrations, then start the API. Safe to repeat: upgrade is a no-op when up to date.
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  worker:
+    build: ./backend
+    env_file: ./backend/.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:devpass@db:5432/bep
+    command: python -m app.worker.main
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        condition: service_started   # api runs the migrations first
+    restart: unless-stopped
+
+  ui:
+    build: ./frontend
+    environment:
+      API_URL: http://api:8000   # the UI calls the backend over HTTP, never the database
+    ports:
+      - "8501:8501"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:

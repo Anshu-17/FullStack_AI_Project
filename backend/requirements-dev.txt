@@ -1,0 +1,7 @@
+# Dev and test tools (not installed in the production Docker image)
+pytest==9.2.0                         # test runner
+pytest-asyncio==1.5.0                 # lets tests run async code
+pytest-cov==7.1.0                     # test coverage report
+respx==0.23.1                         # fakes HTTP calls (websites, AI APIs) in tests
+ruff==0.17.5                          # linter and formatter
+pip-tools==7.7.0                      # regenerates the lockfiles
