@@ -63,6 +63,12 @@ def test_add_company_201_then_200(api):
     assert_error(api.post("/api/companies", json={"name": "Bad", "website": "not a site"}), 422, "VALIDATION_ERROR")
 
 
+def test_timestamps_are_returned_in_utc(api, db):
+    company = make_company(db)
+    created = api.get(f"/api/companies/{company.id}").json()["created_at"]
+    assert created.endswith("+00:00"), created
+
+
 def test_company_detail_unscanned_answers_are_null(api, db):
     company = make_company(db)
     body = api.get(f"/api/companies/{company.id}").json()
