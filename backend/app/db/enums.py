@@ -32,6 +32,12 @@ class Provenance(StrEnum):
     RULE = "rule"  # set by an explicit business rule (e.g. Accounting)
 
 
+class CompanySource(StrEnum):
+    USER = "user"            # a real company added by a user
+    FIXTURE = "fixture"      # a local test website (fixtures/sites) - test data
+    SYNTHETIC = "synthetic"  # generated rows for scale tests - test data
+
+
 class UploadRowResult(StrEnum):
     ACCEPTED = "accepted"    # new company created
     EXISTING = "existing"    # valid, company already in the database (linked, not duplicated)

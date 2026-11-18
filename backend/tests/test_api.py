@@ -63,6 +63,26 @@ def test_add_company_201_then_200(api):
     assert_error(api.post("/api/companies", json={"name": "Bad", "website": "not a site"}), 422, "VALIDATION_ERROR")
 
 
+def test_test_data_is_labelled_and_can_be_hidden(api, db):
+    real = api.post("/api/companies", json={"name": "Real Co-op", "website": "real.example"}).json()["company"]
+    up = api.post("/api/uploads", data={"source": "synthetic"},
+                  files={"file": ("s.csv", b"company_name,website\nSynth 1,synth1.example\n")})
+    assert up.status_code == 201, up.text
+    items = {c["canonical_domain"]: c for c in api.get("/api/companies").json()["items"]}
+    assert (real["source"], real["is_test_data"]) == ("user", False)
+    assert (items["synth1.example"]["source"], items["synth1.example"]["is_test_data"]) == ("synthetic", True)
+    only_real = api.get("/api/companies?include_test=false").json()
+    assert [c["canonical_domain"] for c in only_real["items"]] == ["real.example"]
+    export = api.get("/api/exports?format=csv").text.splitlines()
+    assert export[0].split(",")[3] == "source" and any(",synthetic," in line for line in export[1:])
+    # an existing company keeps its label when it shows up again in a normal upload
+    api.post("/api/uploads", files={"file": ("u.csv", b"company_name,website\nSynth again,synth1.example\n")})
+    assert {c["canonical_domain"]: c["source"] for c in api.get("/api/companies").json()["items"]}[
+        "synth1.example"] == "synthetic"
+    bad = api.post("/api/uploads", data={"source": "bogus"}, files={"file": ("b.csv", b"company_name,website\n")})
+    assert bad.status_code == 422
+
+
 def test_timestamps_are_returned_in_utc(api, db):
     company = make_company(db)
     created = api.get(f"/api/companies/{company.id}").json()["created_at"]

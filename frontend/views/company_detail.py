@@ -22,6 +22,8 @@ last_scanned = next((j["finished_at"] for j in scans if j["status"] in ("complet
 
 # ------------------------------------------------------------------ header
 st.title(company["name"])
+if company.get("is_test_data"):
+    st.markdown(f"{ui.test_data_badge(company)} This is test data ({company['source']}), not a real company.")
 st.markdown(f"[{company['website_url']}]({company['website_url']}) · last scanned **{ui.when(last_scanned)}** · "
             f"latest job: **{latest_job['status'] if latest_job else 'never scanned'}**")
 if api_client.is_reviewer() and st.button("Rescan this company", icon=":material/refresh:"):

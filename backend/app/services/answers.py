@@ -14,7 +14,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import selectinload
 
-from app.db.enums import Category, JobStatus
+from app.db.enums import Category, CompanySource, JobStatus
 from app.db.models import Classification, Company, Job, Override, Page
 
 ALL_CATEGORIES = [str(c) for c in Category]  # accounting + the 6 site categories
@@ -107,9 +107,12 @@ def final_answers_bulk(db, company_ids: list[int], with_evidence: bool = False) 
     return result
 
 
-def company_query(search: str | None = None):
-    """SELECT companies, optionally matching a search text in the name or domain (case-insensitive)."""
+def company_query(search: str | None = None, include_test: bool = True):
+    """SELECT companies, optionally matching a search text in the name or domain (case-insensitive),
+    optionally without test data (fixture / synthetic companies)."""
     stmt = select(Company).order_by(Company.name, Company.id)
+    if not include_test:
+        stmt = stmt.where(Company.source == CompanySource.USER)
     if search and search.strip():
         like = f"%{search.strip()}%"
         stmt = stmt.where(or_(Company.name.ilike(like), Company.canonical_domain.ilike(like)))

@@ -15,18 +15,22 @@ search = f1.text_input("Search name or website")
 category = f2.selectbox("Category", ["Any", *ui.CATEGORIES],
                         format_func=lambda c: c if c == "Any" else ui.CATEGORY_LABEL[c])
 status = f3.selectbox("Final answer", list(STATUS_FILTER))
-filters = {"search": search, "category": None if category == "Any" else category, "status": STATUS_FILTER[status]}
+hide_test = st.checkbox("Hide test data", help="Fixture and synthetic companies used for testing")
+filters = {"search": search, "category": None if category == "Any" else category, "status": STATUS_FILTER[status],
+           "include_test": "false" if hide_test else None}
 page = st.session_state.get("companies_page", 1)
 
 data = ui.load("companies", api_client.get, "/api/companies", page=page, page_size=PAGE_SIZE, **filters)
 
 if data["total"] == 0:
-    st.info("No companies match." if any(filters.values()) else "No companies yet. Add some on 'Add companies'.")
+    st.info("No companies match." if any(v for k, v in filters.items() if k != "include_test")
+            else "No companies yet. Add some on 'Add companies'.")
 else:
     rows = []
     for c in data["items"]:
         job = c["latest_job"] or {}
         row = {"id": c["id"], "name": c["name"], "domain": c["canonical_domain"],
+               "data": "Test data" if c.get("is_test_data") else "",
                "last scanned": ui.when(c["last_scanned_at"]), "latest job": job.get("status", "-")}
         for cat in ui.CATEGORIES:
             answer = c["answers"][cat]

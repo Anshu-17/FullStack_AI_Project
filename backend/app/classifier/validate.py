@@ -9,6 +9,9 @@ Rules (in this order, per category):
 3. "yes"/"possible" with no verified quote left         -> "not_found"
 4. "yes" whose verified quotes contain none of the category's keywords -> "possible"
    (a simple relevance heuristic: quoting "We love our community" is not grain evidence)
+4b. "yes" whose verified quotes are all very short (< 25 characters or < 4 words, e.g. a menu
+   heading like "Feed and Nutrition") -> "possible": too weak to be sure
+
 5. Evidence attached to "not_found" is ignored.
 """
 from dataclasses import dataclass, field
@@ -21,6 +24,7 @@ from app.db.enums import ClassStatus, Provenance
 MIN_QUOTE_CHARS, MAX_QUOTE_CHARS = 10, 300
 MAX_QUOTES = 3
 MAX_EXPLANATION_CHARS = 400
+MIN_YES_QUOTE_CHARS, MIN_YES_QUOTE_WORDS = 25, 4  # a "yes" needs at least one quote this substantial
 
 
 class InvalidModelOutput(Exception):
@@ -43,6 +47,12 @@ class CheckedDecision:
     confidence: float | None
     provenance: str = Provenance.SITE
     evidence: list[CheckedEvidence] = field(default_factory=list)
+
+
+def is_substantial(quote: str) -> bool:
+    """Evidence strong enough for a "yes": at least 25 characters AND at least 4 words.
+    "Feed and Nutrition" (a menu heading) is not; "We deliver bulk propane to farms" is."""
+    return len(quote.strip()) >= MIN_YES_QUOTE_CHARS and len(quote.split()) >= MIN_YES_QUOTE_WORDS
 
 
 def _squash(text: str) -> str:
@@ -96,6 +106,9 @@ def validate(output: ClassificationOutput, passages: list[Passage], pages) -> tu
                                        "in the crawled pages.")
             elif d.status == ClassStatus.YES and not any(keyword_hits(category, e.quote) for e in checked.evidence):
                 issues.append(f"{category}: 'yes' quotes mention no {category} keyword -> possible")
+                checked.status = ClassStatus.POSSIBLE
+            elif d.status == ClassStatus.YES and not any(is_substantial(e.quote) for e in checked.evidence):
+                issues.append(f"{category}: 'yes' rests only on very short quotes (e.g. a menu heading) -> possible")
                 checked.status = ClassStatus.POSSIBLE
 
         decisions.append(checked)

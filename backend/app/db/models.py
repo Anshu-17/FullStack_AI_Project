@@ -33,6 +33,7 @@ from app.db.enums import (
     AttemptStatus,
     Category,
     ClassStatus,
+    CompanySource,
     JobStatus,
     PageOutcome,
     Provenance,
@@ -88,8 +89,12 @@ class Company(Base):
     """One real business, identified by its cleaned website domain."""
 
     __tablename__ = "companies"
+    __table_args__ = (CheckConstraint(one_of("source", CompanySource), name="source"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    # user = real company; fixture / synthetic = TEST DATA (shown with a "Test data" badge, can be hidden)
+    source: Mapped[str] = mapped_column(String(20), nullable=False, default=CompanySource.USER,
+                                        server_default=CompanySource.USER.value)
     name: Mapped[str] = mapped_column(String(300), nullable=False)
     website_url: Mapped[str] = mapped_column(String(2048), nullable=False)  # normalized start URL
     # e.g. "agtegra.com" - UNIQUE: the same business can never be stored twice (scenario C)

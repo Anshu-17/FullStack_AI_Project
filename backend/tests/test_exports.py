@@ -42,7 +42,7 @@ def test_csv_has_one_row_per_company_and_all_category_columns(api, db):
     assert r.headers["content-disposition"].startswith('attachment; filename="companies-')
     rows = list(csv.DictReader(io.StringIO(r.text)))
     assert len(rows) == 2
-    expected_cols = ["company_name", "website", "canonical_domain", "last_scanned_at"] + [
+    expected_cols = ["company_name", "website", "canonical_domain", "source", "last_scanned_at"] + [
         f"{c}_{f}" for c in ALL_CATEGORIES for f in ("status", "source", "evidence_url", "quote", "conflict")]
     assert list(rows[0].keys()) == expected_cols
 

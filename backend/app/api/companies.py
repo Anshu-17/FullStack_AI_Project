@@ -11,7 +11,7 @@ from app.api.errors import ApiError, not_found
 from app.api.runs import run_created_response
 from app.auth import require_reviewer
 from app.db.deps import get_db
-from app.db.enums import Category, ClassStatus, UploadRowResult
+from app.db.enums import Category, ClassStatus, CompanySource, UploadRowResult
 from app.db.models import Company, Job, UploadRow, User
 from app.schemas.common import PageParams, page_params, page_response
 from app.services.answers import (
@@ -30,11 +30,12 @@ router = APIRouter(tags=["companies"])
 class CompanyIn(BaseModel):
     name: str = Field(min_length=1, max_length=300)
     website: str = Field(min_length=1, max_length=2048)
+    source: CompanySource = CompanySource.USER  # fixture / synthetic = test data
 
 
 def company_json(c: Company) -> dict:
     return {"id": c.id, "name": c.name, "website_url": c.website_url, "canonical_domain": c.canonical_domain,
-            "created_at": c.created_at}
+            "source": c.source, "is_test_data": c.source != CompanySource.USER, "created_at": c.created_at}
 
 
 def job_json(j: Job | None) -> dict | None:
@@ -48,7 +49,7 @@ def job_json(j: Job | None) -> dict | None:
 @router.post("/companies", dependencies=[Depends(require_reviewer)])
 def add_company(body: CompanyIn, db: Session = Depends(get_db)):
     """Single company. 201 if new, 200 if the website already exists (no duplicate is created)."""
-    upload = ingest_rows(db, [{"row_no": 1, "name": body.name, "website": body.website}])
+    upload = ingest_rows(db, [{"row_no": 1, "name": body.name, "website": body.website}], source=body.source)
     row = db.scalar(select(UploadRow).where(UploadRow.upload_id == upload.id))
     if row.result == UploadRowResult.INVALID:
         raise ApiError(422, "VALIDATION_ERROR", row.error_message, {"fields": [{"field": "body.website"
@@ -70,14 +71,15 @@ def _latest_jobs(db, company_ids: list[int]) -> dict[int, Job]:
 
 @router.get("/companies")
 def list_companies(search: str | None = None, category: Category | None = None,
-                   status: ClassStatus | None = None, params: PageParams = Depends(page_params),
+                   status: ClassStatus | None = None, include_test: bool = True,
+                   params: PageParams = Depends(page_params),
                    db: Session = Depends(get_db)):
     """Companies with their FINAL answer per category (human override wins).
 
     Filters: search (name or domain); category + status (final answer for that category);
     status alone (any category has it); category alone (that category has been answered).
     """
-    stmt = company_query(search)
+    stmt = company_query(search, include_test)
 
     if category is None and status is None:  # no answer filter: paginate in SQL
         total = db.scalar(select(func.count()).select_from(stmt.order_by(None).subquery()))

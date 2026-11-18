@@ -17,7 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
 from app.crawler.urls import canonical_domain, normalize_page_url
-from app.db.enums import UploadRowResult
+from app.db.enums import CompanySource, UploadRowResult
 from app.db.models import Company, Upload, UploadRow
 
 MAX_CSV_BYTES = 2 * 1024 * 1024  # 2 MB
@@ -85,11 +85,11 @@ def _check_row(name: str, website: str) -> tuple[str | None, str | None, str | N
     return None, None, domain
 
 
-def _insert_or_get_company(db, name: str, website: str, domain: str) -> tuple[int, bool]:
+def _insert_or_get_company(db, name: str, website: str, domain: str, source: str) -> tuple[int, bool]:
     """(company_id, created). Safe when another upload inserts the same domain at the same time."""
     start_url = normalize_page_url(website if "://" in website else f"https://{website}")
     company_id = db.scalar(
-        insert(Company).values(name=name, website_url=start_url, canonical_domain=domain)
+        insert(Company).values(name=name, website_url=start_url, canonical_domain=domain, source=source)
         .on_conflict_do_nothing(index_elements=[Company.canonical_domain])
         .returning(Company.id)
     )
@@ -99,8 +99,13 @@ def _insert_or_get_company(db, name: str, website: str, domain: str) -> tuple[in
     return db.scalar(select(Company.id).where(Company.canonical_domain == domain)), False
 
 
-def ingest_rows(db, rows: list[dict], uploaded_by=None, file_name=None, file_sha256=None) -> Upload:
-    """Create the Upload + one UploadRow per row (+ new companies) in ONE transaction."""
+def ingest_rows(db, rows: list[dict], uploaded_by=None, file_name=None, file_sha256=None,
+                source: str = CompanySource.USER) -> Upload:
+    """Create the Upload + one UploadRow per row (+ new companies) in ONE transaction.
+
+    source labels NEW companies: user (real) or fixture / synthetic (test data). An existing company
+    keeps its label.
+    """
     upload = Upload(uploaded_by=uploaded_by, file_name=file_name, file_sha256=file_sha256, total_rows=len(rows))
     db.add(upload)
     db.flush()  # get upload.id
@@ -119,7 +124,7 @@ def ingest_rows(db, rows: list[dict], uploaded_by=None, file_name=None, file_sha
             result.error_message = f"Same website as row {first_row_for_domain[domain]} ({domain})."
         else:
             first_row_for_domain[domain] = row["row_no"]
-            result.company_id, created = _insert_or_get_company(db, name, website, domain)
+            result.company_id, created = _insert_or_get_company(db, name, website, domain, str(source))
             result.result = UploadRowResult.ACCEPTED if created else UploadRowResult.EXISTING
             if not created:
                 result.error_message = f"Company with website {domain} already exists; linked to it."

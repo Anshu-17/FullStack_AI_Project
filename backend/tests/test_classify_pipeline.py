@@ -172,6 +172,30 @@ def test_size_limits_cost_one_quote_not_the_whole_answer(db, job, monkeypatch):
     assert any("only the first 3 used" in i for i in result.issues)
 
 
+def test_yes_resting_only_on_a_short_quote_becomes_possible(db, monkeypatch):
+    """'Feed and Nutrition' (a menu heading) is verified text, but too weak for a 'yes'."""
+    job = make_job(db, ["Welcome to Prairie Co-op, serving farmers since 1921.\nFeed and Nutrition\n"
+                        "Contact our team for prices."])
+    pid = passage_id(db, job.id, "Feed and Nutrition")
+    short = {"feed": {"category": "feed", "status": "yes", "explanation": "menu",
+                      "evidence": [{"passage_id": pid, "quote": "Feed and Nutrition"}]}}
+    nf = {c: {"category": c, "status": "not_found", "explanation": "-", "evidence": []}
+          for c in ("agronomy", "grain", "energy", "gas_station", "retail_store")}
+    use_models(monkeypatch, google=FakeModel(output(db, job.id, {**nf, **short})), groq=FakeModel())
+    result = classify_job(db, job.id)
+    feed = saved(db, job)["feed"]
+    assert feed.status == "possible"
+    assert feed.evidence[0].quote == "Feed and Nutrition"  # the quote is kept, just not trusted for "yes"
+    assert any("very short quotes" in i for i in result.issues) and result.needs_review
+
+
+def test_is_substantial():
+    from app.classifier.validate import is_substantial
+    assert not is_substantial("Feed and Nutrition")                 # 18 chars
+    assert not is_substantial("Supercalifragilistic-expialidocious")  # long but 1 word
+    assert is_substantial("We deliver bulk propane to farms")    # 32 chars, 6 words
+
+
 def test_yes_with_irrelevant_quote_becomes_possible(db, job, monkeypatch):
     quote = "Prairie Co-op serves farmers across the region."
     off_topic = {"grain": {"category": "grain", "status": "yes", "explanation": "co-op",

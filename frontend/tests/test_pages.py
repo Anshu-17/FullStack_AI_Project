@@ -54,6 +54,21 @@ def test_companies_page_shows_rows():
 
 
 @respx.mock
+def test_test_data_is_badged_and_can_be_hidden():
+    answers = {c: {"status": None, "provenance": None, "conflict": False}
+               for c in ("accounting", "agronomy", "grain", "energy", "feed", "gas_station", "retail_store")}
+    item = {"id": 9, "name": "Clear Co-op (fixture)", "website_url": "http://clear-coop.fixture.test/",
+            "canonical_domain": "clear-coop.fixture.test", "source": "fixture", "is_test_data": True,
+            "created_at": "2026-11-18T07:00:00+00:00", "answers": answers, "latest_job": None, "last_scanned_at": None}
+    route = respx.get(f"{API_URL}/api/companies").respond(200, json=companies_body([item]))
+    at = page("../views/companies.py", VIEWER).run()
+    assert list(at.dataframe[0].value["data"]) == ["Test data"]
+    assert "include_test" not in str(route.calls.last.request.url)  # shown by default
+    at.checkbox[0].check().run()
+    assert "include_test=false" in str(route.calls.last.request.url)
+
+
+@respx.mock
 def test_companies_page_empty_state():
     respx.get(f"{API_URL}/api/companies").respond(200, json=companies_body([]))
     at = page("../views/companies.py", VIEWER).run()

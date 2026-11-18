@@ -67,8 +67,8 @@ def _first_quote(answer: dict) -> tuple[str, str]:
 @router.get("/exports")
 def export_companies(format: str = Query("csv", pattern="^(csv|json)$"), search: str | None = None,
                      category: Category | None = None, status: ClassStatus | None = None,
-                     db: Session = Depends(get_db)):
-    companies = db.scalars(company_query(search)).all()
+                     include_test: bool = True, db: Session = Depends(get_db)):
+    companies = db.scalars(company_query(search, include_test)).all()
     answers = final_answers_bulk(db, [c.id for c in companies], with_evidence=True)
     companies = [c for c in companies if matches_filter(answers[c.id], category, status)]
     finished = latest_finished_jobs(db, [c.id for c in companies])
@@ -80,18 +80,18 @@ def export_companies(format: str = Query("csv", pattern="^(csv|json)$"), search:
         history = override_history(db, [c.id for c in companies])
         items = [{
             "company_name": c.name, "website": c.website_url, "canonical_domain": c.canonical_domain,
-            "last_scanned_at": last_scanned(c.id), "answers": list(answers[c.id].values()),
+            "source": c.source, "last_scanned_at": last_scanned(c.id), "answers": list(answers[c.id].values()),
             "override_history": [h for h in history if h["company_id"] == c.id],
         } for c in companies]
         return _stream(_json_chunks(items), _filename("companies", "json"), "application/json")
 
-    header = ["company_name", "website", "canonical_domain", "last_scanned_at"]
+    header = ["company_name", "website", "canonical_domain", "source", "last_scanned_at"]
     for cat in ALL_CATEGORIES:
         header += [f"{cat}_status", f"{cat}_source", f"{cat}_evidence_url", f"{cat}_quote", f"{cat}_conflict"]
     rows = []
     for c in companies:
         scanned = last_scanned(c.id)
-        row = [c.name, c.website_url, c.canonical_domain, scanned.isoformat() if scanned else ""]
+        row = [c.name, c.website_url, c.canonical_domain, c.source, scanned.isoformat() if scanned else ""]
         for cat in ALL_CATEGORIES:
             a = answers[c.id][cat]
             url, quote = _first_quote(a)

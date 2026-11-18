@@ -37,6 +37,11 @@ def source_badge(provenance: str | None) -> str:
     return f":{colour}-badge[{label}]"
 
 
+def test_data_badge(company: dict) -> str:
+    """Grey 'Test data' badge for fixture / synthetic companies (empty for real ones)."""
+    return ":gray-badge[Test data]" if company.get("is_test_data") else ""
+
+
 def when(value: str | None) -> str:
     """ISO timestamp from the API -> '2026-11-18 07:55 UTC' (or '-')."""
     if not value:
