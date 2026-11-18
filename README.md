@@ -14,6 +14,10 @@ Researches public company websites, classifies business lines (Accounting, Agron
 | `sample-data/` | Input CSVs |
 | `docs/` | Design, decision log, AI usage, test evidence |
 
+## Deploy (Supabase + Render)
+
+Step-by-step: [docs/deployment.md](docs/deployment.md) (Render Blueprint: `render.yaml`).
+
 ## Run locally with Docker
 
 ```bash

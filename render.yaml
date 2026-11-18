@@ -1,0 +1,68 @@
+# Render Blueprint: two free Docker web services. See docs/deployment.md for the step-by-step.
+#
+#   bep-api  backend/  - API + background worker in ONE container (start.sh), health check /health
+#   bep-ui   frontend/ - Streamlit UI, calls bep-api over HTTPS (never the database)
+#
+# Secrets use `sync: false`: Render asks for their values when the Blueprint is created; they are
+# never stored in this file. If Render gives a service a different URL than below (name already taken),
+# change API_URL / CORS_ORIGINS in the dashboard to the real URLs.
+services:
+  - type: web
+    name: bep-api
+    runtime: docker
+    plan: free
+    region: frankfurt          # pick the region closest to your Supabase project
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # --- secrets (filled in by you on Render) ---
+      - key: DATABASE_URL        # Supabase SESSION pooler string (port 5432), see docs/deployment.md
+        sync: false
+      - key: JWT_SECRET          # long random string (>= 32 chars); the API refuses to start otherwise
+        sync: false
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: SEED_REVIEWER_PASSWORD   # required in production: the seed never generates passwords there
+        sync: false
+      - key: SEED_VIEWER_PASSWORD
+        sync: false
+      # --- plain settings ---
+      - key: ENVIRONMENT
+        value: production
+      - key: LOG_JSON
+        value: "true"
+      - key: LOG_LEVEL
+        value: INFO
+      - key: AI_PROVIDER
+        value: google
+      - key: AI_FALLBACK_PROVIDERS
+        value: groq
+      - key: GOOGLE_MODEL
+        value: gemini-2.5-flash
+      - key: GROQ_MODEL
+        value: openai/gpt-oss-120b
+      - key: WORKER_CONCURRENCY
+        value: "1"
+      - key: CORS_ORIGINS          # the UI's public URL (Streamlit calls the API server-side; kept for browsers)
+        value: https://bep-ui.onrender.com
+      - key: SEED_REVIEWER_EMAIL
+        value: reviewer@demo.local
+      - key: SEED_VIEWER_EMAIL
+        value: viewer@demo.local
+
+  - type: web
+    name: bep-ui
+    runtime: docker
+    plan: free
+    region: frankfurt
+    rootDir: frontend
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /_stcore/health
+    autoDeploy: true
+    envVars:
+      - key: API_URL               # the API's PUBLIC URL (free services can't use Render's private network)
+        value: https://bep-api.onrender.com

@@ -6,6 +6,7 @@ Safe to run repeatedly (existing rows are left alone). Creates:
 
 Passwords come from SEED_*_PASSWORD settings (.env). If blank, a random password
 is generated and printed ONCE - nothing secret is stored in the repository.
+In production (ENVIRONMENT=production) both passwords are REQUIRED; nothing is generated or printed.
 """
 import secrets
 
@@ -38,10 +39,18 @@ def seed_policy(db) -> None:
         print("policy v1 already exists")
 
 
+class SeedError(Exception):
+    pass
+
+
 def seed_user(db, email: str, role: Role, configured_password: str) -> None:
     if db.scalar(select(User).where(User.email == email)):
         print(f"user {email} already exists")
         return
+    if not configured_password and settings.environment == "production":
+        # In production nothing is generated or printed: logs are kept by the host and may be read by others.
+        raise SeedError(f"{email}: set SEED_REVIEWER_PASSWORD / SEED_VIEWER_PASSWORD in the environment "
+                        "(required when ENVIRONMENT=production; the seed never generates or prints passwords there)")
     password = configured_password or secrets.token_urlsafe(12)
     db.add(User(email=email, password_hash=hash_password(password), role=role))
     shown = "(from .env)" if configured_password else f"{password}  <- generated, save it now"
@@ -56,4 +65,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SeedError as exc:
+        raise SystemExit(f"seed refused: {exc}") from exc
