@@ -270,6 +270,43 @@ def test_lost_lease_before_finalize_saves_nothing(worker_env):
     assert any(kw.get("error_code") == "LEASE_LOST" for _, kw in worker_env["log"].events)
 
 
+def test_database_write_failure_at_finalize_saves_nothing_then_retry_succeeds(worker_env, monkeypatch):
+    """Scenario F: the final save fails half-way (after some rows were added) -> the whole transaction is
+    rolled back: no classifications, job not completed, attempt failed, job re-queued with backoff.
+    The next attempt succeeds (and reuses the pages saved by the first one)."""
+    Session = worker_env["Session"]
+    job_id, _ = worker_env["new_job"]()
+    real_save = process.save_classifications
+    calls = {"n": 0}
+
+    def failing_save(db, job_id_, result):
+        calls["n"] += 1
+        real_save(db, job_id_, result)  # rows ARE added to the transaction ...
+        if calls["n"] == 1:
+            db.flush()                  # ... and even sent to the database ...
+            raise RuntimeError("simulated database failure during commit")  # ... then it fails
+
+    monkeypatch.setattr(process, "save_classifications", failing_save)
+    process.process_job(claim(Session), "w1")
+
+    st = state(Session, job_id)
+    print("\nSCENARIO F after failed save:", {k: st[k] for k in ("status", "attempts", "classifications", "error")})
+    assert st["classifications"] == 0  # rolled back, nothing half-saved
+    assert st["status"] == "queued" and st["error"] == "INTERNAL_ERROR"
+    assert st["attempts"] == [(1, "failed", "INTERNAL_ERROR")]
+    assert st["next_attempt_at"] > datetime.now(UTC)  # backoff before the retry
+
+    with Session() as s:  # pretend the backoff has passed
+        s.get(Job, job_id).next_attempt_at = datetime.now(UTC) - timedelta(seconds=1)
+        s.commit()
+    monkeypatch.setattr(process, "crawl_site", lambda url: (_ for _ in ()).throw(AssertionError("no re-crawl")))
+    process.process_job(claim(Session), "w1")
+    st = state(Session, job_id)
+    print("SCENARIO F after retry:", {k: st[k] for k in ("status", "attempts", "classifications")})
+    assert (st["status"], st["classifications"]) == ("completed", 7)
+    assert st["attempts"] == [(1, "failed", "INTERNAL_ERROR"), (2, "succeeded", None)]
+
+
 def test_retry_reuses_pages_saved_by_an_earlier_attempt(worker_env, monkeypatch):
     Session = worker_env["Session"]
     job_id, _ = worker_env["new_job"]()

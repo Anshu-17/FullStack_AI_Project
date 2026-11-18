@@ -39,6 +39,14 @@ def allowed_private_hosts() -> set[str]:
     return {h.strip().lower() for h in settings.crawl_allowed_private_hosts.split(",") if h.strip()}
 
 
+def is_allowlisted(host: str) -> bool:
+    """Exact name ('fixtures.localhost') or a '*.suffix' pattern ('*.fixture.test' matches 'a.fixture.test')."""
+    for entry in allowed_private_hosts():
+        if host == entry or (entry.startswith("*.") and host.endswith(entry[1:])):
+            return True
+    return False
+
+
 def is_ip_literal(host: str) -> bool:
     """True for '10.0.0.5' or '::1' (an address typed directly, no DNS needed)."""
     try:
@@ -92,7 +100,7 @@ def check_url_is_safe(url: str) -> None:
     except ValueError as exc:
         raise UnsafeURLError("invalid port") from exc
 
-    if host in allowed_private_hosts():
+    if is_allowlisted(host):
         return  # local fixture explicitly allowed (never in production)
 
     ips = [host] if is_ip_literal(host) else resolve_host(host)

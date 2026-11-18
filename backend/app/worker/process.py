@@ -31,7 +31,6 @@ from app.worker.leases import heartbeat
 
 log = get_logger("worker.process")
 
-BACKOFF_BASE_SECONDS = 10
 BACKOFF_MAX_SECONDS = 300
 
 
@@ -48,8 +47,9 @@ class CancelRequested(Exception):
 
 
 def backoff_seconds(attempt: int) -> float:
-    """min(300, 10 * 2^(attempt-1)) seconds, plus 0-25 % random jitter (so retries don't all fire together)."""
-    base = min(BACKOFF_MAX_SECONDS, BACKOFF_BASE_SECONDS * 2 ** (attempt - 1))
+    """min(300, base * 2^(attempt-1)) seconds (base = 10 by default), plus 0-25 % random jitter
+    (so retries don't all fire together)."""
+    base = min(BACKOFF_MAX_SECONDS, settings.job_backoff_base_seconds * 2 ** (attempt - 1))
     return base * (1 + random.uniform(0, 0.25))
 
 

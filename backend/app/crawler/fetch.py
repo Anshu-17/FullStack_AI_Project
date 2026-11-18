@@ -39,8 +39,42 @@ class FetchResult:
     elapsed_ms: int = 0
 
 
+FIXTURE_SUFFIX = ".fixture.test"  # ".test" is reserved (RFC 2606): never a real website
+
+
+class FixtureTransport(httpx.BaseTransport):
+    """TEST-ONLY: send requests for *.fixture.test to the local fixture server (fixtures/server.py).
+
+    The request keeps its original Host header, so the server knows which fixture site to serve,
+    and httpx keeps reporting the original URL (http://clear-coop.fixture.test/...). Only active
+    when CRAWL_FIXTURE_SERVER is set AND ENVIRONMENT is not production.
+    """
+
+    def __init__(self, target: str):
+        host, _, port = target.partition(":")
+        self.host, self.port = host, int(port or 80)
+        self.inner = httpx.HTTPTransport()
+
+    def handle_request(self, request: httpx.Request) -> httpx.Response:
+        headers = request.headers.copy()  # httpx.Headers is case-insensitive: this REPLACES the Host header
+        headers["Host"] = request.url.netloc.decode("ascii")
+        rerouted = httpx.Request(request.method, request.url.copy_with(scheme="http", host=self.host, port=self.port),
+                                 headers=headers, stream=request.stream, extensions=request.extensions)
+        return self.inner.handle_request(rerouted)
+
+    def close(self) -> None:
+        self.inner.close()
+
+
+def fixture_routing_enabled() -> bool:
+    return bool(settings.crawl_fixture_server) and settings.environment != "production"
+
+
 def make_client() -> httpx.Client:
     """One HTTP client per crawl (reuses connections to the same site)."""
+    mounts = {}
+    if fixture_routing_enabled():
+        mounts[f"all://*{FIXTURE_SUFFIX}"] = FixtureTransport(settings.crawl_fixture_server)
     return httpx.Client(
         timeout=settings.crawl_timeout_seconds,
         headers={
@@ -49,6 +83,7 @@ def make_client() -> httpx.Client:
         },
         follow_redirects=False,  # we follow redirects ourselves so each hop is SSRF-checked
         trust_env=False,         # ignore proxy / .netrc settings from the environment
+        mounts=mounts,
     )
 
 

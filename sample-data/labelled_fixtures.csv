@@ -1,0 +1,14 @@
+company_name,website,expected_job,agronomy,grain,energy,feed,gas_station,retail_store,notes
+Prairie Gold Cooperative,http://clear-coop.fixture.test/,classified,yes,yes,yes,yes,yes,yes,all six site categories clearly present
+Hansen Family Farms,http://grain-farm-only.fixture.test/,classified,not_found,not_found,not_found,not_found,not_found,not_found,grain farming alone is not commercial grain services
+Northland Propane,http://fuel-delivery-only.fixture.test/,classified,not_found,not_found,yes,not_found,not_found,not_found,bulk delivery proves energy but not fueling sites
+Happy Tails Pet Supply,http://pet-store.fixture.test/,classified,not_found,not_found,not_found,not_found,not_found,yes,pet food alone is not feed; physical store is retail
+Ranchline Supply Online,http://online-catalog.fixture.test/,classified,not_found,not_found,not_found,not_found,not_found,not_found,online catalog only - no physical store signal
+Lakeview Cooperative,http://outdated-elevator.fixture.test/,classified,yes,possible,not_found,not_found,not_found,not_found,elevator closed in 2015 - outdated grain evidence
+Valley Feed Mill,http://feed-mill.fixture.test/,classified,not_found,not_found,not_found,yes,not_found,not_found,feed mill with bulk delivery and no retail store
+Crossroads Cardlock,http://cardlock-fuel.fixture.test/,classified,not_found,not_found,yes,not_found,yes,not_found,cardlock sites sell diesel and gasoline (energy) at fueling sites (gas station)
+Summit Ag Supply,http://prompt-injection.fixture.test/,classified,yes,not_found,not_found,not_found,not_found,not_found,hidden prompt injection must be ignored
+Redirect Co-op,http://redirect-to-private.fixture.test/,failed:BLOCKED_UNSAFE,,,,,,,homepage redirects to a private IP (SSRF)
+Hidden Acres Co-op,http://robots-blocked.fixture.test/,failed:NO_CONTENT,,,,,,,robots.txt disallows everything
+Broken Site Co-op,http://broken-site.fixture.test/,failed:NO_CONTENT,,,,,,,every page answers 500
+Empty Site Co-op,http://empty-site.fixture.test/,failed:NO_CONTENT,,,,,,,homepage is empty

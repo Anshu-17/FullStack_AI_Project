@@ -68,13 +68,17 @@ class Settings(BaseSettings):
     crawl_job_deadline_seconds: int = 120   # wall-clock budget for crawling one website
     crawl_user_agent: str = "BusinessEvidenceBot/0.1 (research prototype)"
     # Comma-separated hostnames allowed to resolve to private IPs (local test fixtures ONLY).
-    # Ignored when ENVIRONMENT=production.
+    # "*.fixture.test" allows every subdomain of fixture.test. Ignored when ENVIRONMENT=production.
     crawl_allowed_private_hosts: str = ""
+    # TEST-ONLY: "127.0.0.1:8765" sends requests for *.fixture.test hosts to the local fixture server
+    # (fixtures/server.py) instead of DNS. Empty = off. Ignored when ENVIRONMENT=production.
+    crawl_fixture_server: str = ""
 
     # --- Worker (section 4.5) ---
     worker_concurrency: int = 2   # jobs processed in parallel by one worker process (free-tier AI limits)
     job_lease_seconds: int = 120  # a job whose lease is not renewed for this long is presumed abandoned
     job_max_attempts: int = 3
+    job_backoff_base_seconds: int = 10  # retry waits: base * 2^(attempt-1), max 300 s (shorter only for tests)
 
     @model_validator(mode="after")
     def refuse_weak_secret_in_production(self):

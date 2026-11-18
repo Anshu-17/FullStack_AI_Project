@@ -19,12 +19,20 @@ from app.log_config import get_logger
 
 log = get_logger("classifier.providers")
 
-KNOWN_PROVIDERS = ("google", "groq", "anthropic", "xai", "openai")
+KNOWN_PROVIDERS = ("google", "groq", "anthropic", "xai", "openai", "fake")  # fake = TEST-ONLY
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 
 
+def fake_allowed() -> bool:
+    """The fake test provider can never be used in production."""
+    return settings.environment != "production"
+
+
 def provider_settings(provider: str) -> tuple[str, str]:
-    """(api_key, model) for a provider, from settings."""
+    """(api_key, model) for a provider, from settings. The fake provider needs no key (and is off in production)."""
+    if provider == "fake":
+        from app.classifier.fake_provider import MODEL_NAME
+        return ("not-needed", MODEL_NAME) if fake_allowed() else ("", "")
     return getattr(settings, f"{provider}_api_key", ""), getattr(settings, f"{provider}_model", "")
 
 
@@ -76,6 +84,11 @@ def build_structured_model(provider: str):
     include_raw=True returns {"raw": message, "parsed": object-or-None, "parsing_error": ...}
     so we still get token usage, and can tell "bad output" apart from "call failed".
     """
+    if provider == "fake":
+        if not fake_allowed():
+            raise ValueError("the fake AI provider is disabled in production")
+        from app.classifier.fake_provider import FakeKeywordModel
+        return FakeKeywordModel()
     kwargs = {"method": "json_schema"} if provider in ("google", "groq", "openai") else {}
     return get_chat_model(provider).with_structured_output(ClassificationOutput, include_raw=True, **kwargs)
 
