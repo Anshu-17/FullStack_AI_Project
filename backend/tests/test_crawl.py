@@ -1,15 +1,16 @@
 """Crawling one website: limits, no duplicates, stays on site, priorities, untrusted text."""
 import respx
 
-from app.crawler.crawl import crawl_site, is_duplicate, link_priority
+from app.crawler.crawl import crawl_site, is_duplicate, link_hints
 from app.db.enums import PageOutcome
 
 SITE = "https://coop.example"
 
 
 def fake_site(pages: dict[str, str]) -> dict:
-    """Serve {path: html} at SITE (robots.txt -> 404 = allow all). Returns {path: respx route}."""
+    """Serve {path: html} at SITE (robots.txt and sitemap.xml -> 404). Returns {path: respx route}."""
     respx.get(f"{SITE}/robots.txt").respond(404)
+    respx.get(f"{SITE}/sitemap.xml").respond(404)
     return {path: respx.get(f"{SITE}{path}").respond(200, html=html) for path, html in pages.items()}
 
 
@@ -106,12 +107,18 @@ def test_relevant_pages_are_fetched_before_blog(fake_dns):
     assert order == [f"{SITE}/", f"{SITE}/grain", f"{SITE}/contact", f"{SITE}/blog"]
 
 
-def test_link_priority():
-    assert link_priority("https://c.example/our-services", "") == 0
-    assert link_priority("https://c.example/p/12", "Propane delivery") == 0  # link text counts too
-    assert link_priority("https://c.example/contact", "Contact") == 1
-    assert link_priority("https://c.example/careers/agronomy-sales", "") == 2  # job ad, not evidence
-    assert link_priority("https://graincoop.example/contact", "") == 1  # the hostname is not a hint
+def test_link_hints():
+    assert link_hints("https://c.example/our-services", "").score == 1  # general word, no group
+    assert link_hints("https://c.example/p/12", "Propane delivery").weights == {"energy": 3}  # link text counts
+    assert link_hints("https://c.example/contact", "Contact").weights == {"locations": 2}
+    job_ad = link_hints("https://c.example/careers/agronomy-sales", "")
+    assert job_ad.low and job_ad.weights == {}  # job ad, not evidence
+    assert link_hints("https://graincoop.example/about", "").weights == {}  # the hostname is not a hint
+    # whole words only, plurals allowed, "-" counts as a space
+    assert "retail_store" in link_hints("https://c.example/ace-hardware", "").weights
+    assert link_hints("https://c.example/marketplace", "").weights == {}  # "ace" inside a word: no
+    assert set(link_hints("https://c.example/c-stores", "").weights) == {"gas_station", "retail_store"}
+    assert link_hints("https://c.example/x", "Feed mills").weights == {"feed": 5}  # feed 3 + mill 2
 
 
 @respx.mock
@@ -129,19 +136,75 @@ def test_one_bad_page_does_not_stop_the_crawl(fake_dns, no_sleep):
 def test_identical_text_pages_are_marked_and_do_not_use_the_page_budget(fake_dns, crawler_settings):
     crawler_settings(crawl_max_pages=3)
     same = "<main><p>We buy grain at our elevators and post daily cash bids.</p></main>"
-    # Crawl order (all high priority, in link order): /grain, /grain-bids (same text!), /feed
-    fake_site({"/": links("/grain", "/grain-bids", "/feed"), "/grain": same, "/grain-bids": same,
-               "/feed": "<p>We sell bagged livestock feed.</p>"})
+    # No hint words -> crawl order = link order: /a, /b (same text as /a!), /c
+    fake_site({"/": links("/a", "/b", "/c"), "/a": same, "/b": same,
+               "/c": "<p>We sell bagged livestock feed.</p>"})
     result = crawl_site(SITE)
 
     urls = [p.url for p in result.pages]
     duplicates = [p for p in result.pages if is_duplicate(p)]
-    assert [p.url for p in duplicates] == [f"{SITE}/grain-bids"]
+    assert [p.url for p in duplicates] == [f"{SITE}/b"]
     assert duplicates[0].outcome == PageOutcome.OK
-    assert duplicates[0].error_detail == f"duplicate_of:{SITE}/grain"
+    assert duplicates[0].error_detail == f"duplicate_of:{SITE}/a"
     assert result.duplicate_pages == 1
-    # 3 counted pages (/, /grain, /feed) + 1 duplicate: /feed was still fetched although the budget is 3
-    assert urls == [f"{SITE}/", f"{SITE}/grain", f"{SITE}/grain-bids", f"{SITE}/feed"]
+    # 3 counted pages (/, /a, /c) + 1 duplicate: /c was still fetched although the budget is 3
+    assert urls == [f"{SITE}/", f"{SITE}/a", f"{SITE}/b", f"{SITE}/c"]
+
+
+@respx.mock
+def test_category_balanced_selection(fake_dns, crawler_settings):
+    """A big agronomy section must not use up the budget: store / fuel / feed pages get a slot first."""
+    crawler_settings(crawl_max_pages=6)
+    agronomy = [f"/agronomy/seed-{i}" for i in range(10)]
+    fake_site({"/": links(*agronomy, "/about", "/c-store", "/ace-hardware", "/feed"),
+               **{p: f"<p>{p}</p>" for p in [*agronomy, "/about", "/c-store", "/ace-hardware", "/feed"]}})
+    result = crawl_site(SITE)
+    reasons = {p.url.removeprefix(SITE): p.reason for p in result.pages}
+    assert reasons == {
+        "/": "homepage",
+        "/agronomy/seed-0": "first page for agronomy",
+        "/feed": "first page for feed",
+        "/c-store": "first page for gas_station",
+        "/ace-hardware": "first page for retail_store",
+        "/agronomy/seed-1": "score 2",  # then by score: agronomy 3 + seed 2, -3 (seed-0 is in the same folder)
+    }
+    assert [p.url for p in crawl_site(SITE).pages] == [p.url for p in result.pages]  # deterministic
+
+
+@respx.mock
+def test_each_group_gets_its_own_page_and_specific_pages_win(fake_dns, crawler_settings):
+    """'/feed-grain/...' pages hint at both feed and grain: grain goes to the grain-specific page, feed is
+    covered once (no second 'first page for feed')."""
+    crawler_settings(crawl_max_pages=4)
+    paths = ["/feed-grain/feed-products", "/feed-grain/nutrition", "/feed-grain/grain-commodities"]
+    fake_site({"/": links(*paths), **{p: f"<p>{p}</p>" for p in paths}})
+    reasons = {p.url.removeprefix(SITE): p.reason for p in crawl_site(SITE).pages}
+    assert reasons == {"/": "homepage", "/feed-grain/grain-commodities": "first page for grain",
+                       "/feed-grain/nutrition": "first page for feed",
+                       "/feed-grain/feed-products": "score 1"}  # feed 3 + grain 3 + products 1, -6 (folder)
+
+
+@respx.mock
+def test_score_phase_spreads_over_sections(fake_dns, crawler_settings):
+    """Many near-identical pages in one folder (cash bids per day) don't fill the remaining budget."""
+    crawler_settings(crawl_max_pages=6)
+    bids = [f"/grain/cash-bids/day-{i}" for i in range(6)]
+    others = ["/energy/propane-safety", "/about-us/history", "/about-us/team"]
+    fake_site({"/": links(*bids, *others), **{p: f"<p>{p}</p>" for p in [*bids, *others]}})
+    urls = [p.url.removeprefix(SITE) for p in crawl_site(SITE).pages]
+    # balance: day-0 (grain), propane-safety (energy). Score phase: day-1 (8 - 3), day-2 (8 - 6); day-3
+    # would be 8 - 9 = -1, so the weak but untouched /about-us page (1) wins the last slot.
+    assert urls == ["/", "/grain/cash-bids/day-0", "/energy/propane-safety", "/grain/cash-bids/day-1",
+                    "/grain/cash-bids/day-2", "/about-us/history"]
+
+
+def test_default_page_budget_is_12():
+    from app.config import Settings
+
+    assert Settings.model_fields["crawl_max_pages"].default == 12
+    # 12 pages x 10 s timeout x up to 3 tries can exceed 120 s in theory, but the deadline is checked
+    # before every fetch, so a slow site just stops early with stopped_reason = "deadline".
+    assert Settings.model_fields["crawl_job_deadline_seconds"].default == 120
 
 
 def test_duplicate_pages_are_not_sent_to_the_ai():

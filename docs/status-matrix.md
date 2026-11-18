@@ -23,7 +23,7 @@ The brief itself is not stored in this repository. Status values are the brief's
 | Workflow | Status | Evidence | Notes |
 |---|---|---|---|
 | 1. Add one URL or upload CSV; validate, normalise, dedupe, report accepted / rejected rows | Built and proven | [bulk_intake_1000.md](evidence/bulk_intake_1000.md), [scenario_C](evidence/scenario_C_duplicates.md) | |
-| 2. Single or batch run; item statuses; inspect successes / failures | Built and proven | [real_site_pilot.md](evidence/real_site_pilot.md), `frontend/tests/test_pages.py::test_run_page_shows_server_progress_and_errors` | |
+| 2. Single or batch run; item statuses; inspect successes / failures | Built and proven | [real_site_pilot.md](evidence/real_site_pilot.md), `frontend/tests/test_pages.py::test_run_page_shows_server_progress_and_errors`, `frontend/tests/test_start_research.py` | start research right after adding a company, from company detail, or for all never-researched companies |
 | 3. Discover relevant pages within crawl and safety limits | Built and proven | crawler tests, [scenario_D](evidence/scenario_D_ssrf_and_injection.md) | |
 | 4. Seven categories, traceable evidence, validated, versioned | Built and proven | [real_site_pilot.md](evidence/real_site_pilot.md) | |
 | 5. Reviewer corrects with reason; who / what / when kept | Built and proven | [scenario_E](evidence/scenario_E_override_conflict.md), [export_sample.md](evidence/export_sample.md) | append-only, old + new value |
@@ -58,8 +58,8 @@ The brief itself is not stored in this repository. Status values are the brief's
 
 | Requirement | Status | Evidence | Notes |
 |---|---|---|---|
-| Discover internal pages, prioritise relevant ones, normalise / dedupe URLs | Built and proven | `tests/test_crawl.py`, `tests/test_urls.py` | also duplicate-text pages |
-| Budgets: depth, pages, total bytes, per-host concurrency, timeouts, retries, job deadline | Built and proven | crawler tests | 2 / 8 / 5 MB / 1 at a time / 120 s per site |
+| Discover internal pages, prioritise relevant ones, normalise / dedupe URLs | Built and proven | `tests/test_crawl.py`, `tests/test_sitemap.py`, `tests/test_urls.py`, [crawl_coverage_improvement.md](evidence/crawl_coverage_improvement.md) | links + sitemap; category-balanced selection; duplicate-text pages; Agfinity gas station / retail found after the fix (live-site finding) |
+| Budgets: depth, pages, total bytes, per-host concurrency, timeouts, retries, job deadline | Built and proven | crawler tests | 2 / 12 / 5 MB (sitemaps included) / 1 at a time / 120 s per site |
 | Redirects, 404 / 429 / 5xx, broken HTML, empty, slow, malformed content | Built and proven | crawler tests, [scenario_H](evidence/scenario_H_ambiguous_unavailable.md) | |
 | SSRF: schemes, private / loopback / link-local / metadata blocked, redirects re-checked | Built and proven | [scenario_D](evidence/scenario_D_ssrf_and_injection.md), `tests/test_safety.py` | |
 | SSRF: DNS-resolution re-check (rebinding) | Partial | - | each hop resolved and checked, but httpx resolves again on connect; no IP pinning |
@@ -71,7 +71,7 @@ The brief itself is not stored in this repository. Status values are the brief's
 
 | Requirement | Status | Evidence | Notes |
 |---|---|---|---|
-| Reproducible staged pipeline (discovery, selection, classification, validation) | Built and proven | [design.md](design.md) section 6 | plain functions; LangGraph dropped |
+| Reproducible staged pipeline (discovery, selection, classification, validation) | Built and proven | [design.md](design.md) sections 6 / 6b | plain functions; LangGraph dropped |
 | Validated structured output; malformed / incomplete never succeeds | Built and proven | [scenario_B](evidence/scenario_B_ai_failures.md) | |
 | Evidence supports its exact category; short excerpts + URLs | Partial | [real_site_pilot.md](evidence/real_site_pilot.md) audit | verbatim + keyword-relevance checks; audit of 78 quotes: 66 OK, 9 weak, 3 questionable |
 | Model never overrides the Accounting rule or a human correction | Built and proven | [scenario_E](evidence/scenario_E_override_conflict.md) | |

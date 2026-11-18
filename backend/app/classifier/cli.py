@@ -75,6 +75,8 @@ def main() -> None:
         ok_pages = sum(1 for p in crawl.pages if p.outcome == "ok")
         print(f"crawl: {len(crawl.pages)} pages ({ok_pages} ok), stopped: {crawl.stopped_reason}"
               + (f", redirected to {crawl.redirected_to}" if crawl.redirected_to else ""))
+        for p in crawl.pages:  # which pages were fetched, and why the crawler chose them
+            print(f"  {short(p.outcome, 17):<17} d{p.depth} {short(p.url, 70):<70} {getattr(p, 'reason', '') or ''}")
 
         result = None
         try:

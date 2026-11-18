@@ -76,6 +76,15 @@ Add and run `http://redirect-to-private.fixture.test/` -> `BLOCKED_UNSAFE` (10.0
 edits, H weak / ambiguous / unavailable evidence, I cancellation during a run, J migration with rollback
 (`docs/evidence/README.md`).
 
+**Found on the live site -> fixed -> re-verified (1.5 min)** - `docs/evidence/crawl_coverage_improvement.md`:
+1. *Found:* on the live site Agfinity showed Gas Station "Not found" although it runs C-Stores and an Ace
+   Hardware. Show the BEFORE page list: homepage + 7 agronomy pages - the 8 slots were used up by one section.
+2. *Fixed:* `backend/app/crawler/sitemap.py` (sitemap, same SSRF-checked fetch) and `choose_next` in
+   `crawler/crawl.py` (one page per category group first, then score minus 3 per page from the same folder).
+3. *Re-verified:* `python -m app.crawler.cli https://www.agfinityinc.com --quiet` shows the WHY CHOSEN column
+   (no AI needed); then rescan Agfinity on the live site -> Gas Station "24-hour pay-at-pump fueling", Retail
+   "Our Brighton Ace Hardware ...". Mention the honest leftovers (energy from menu text).
+
 ## 21:00-25:00 - AI tool usage, important generated code, mistakes found, verification (`docs/ai-usage.md`)
 
 - Tools: Claude (chat) for planning / briefs, Claude Code for implementation and tests; Gemini / Groq only inside the

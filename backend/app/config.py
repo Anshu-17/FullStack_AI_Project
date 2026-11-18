@@ -65,7 +65,7 @@ class Settings(BaseSettings):
     prompt_version: str = "p3"
 
     # --- Crawl limits (section 4.3) ---
-    crawl_max_pages: int = 8                # pages per website (homepage + the most relevant links)
+    crawl_max_pages: int = 12               # pages per website (homepage + the most relevant links / sitemap pages)
     crawl_max_depth: int = 2                # homepage = depth 0
     crawl_timeout_seconds: float = 10.0     # per network operation (connect / read)
     crawl_max_total_bytes: int = 5_000_000  # all pages of one website together

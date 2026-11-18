@@ -45,7 +45,7 @@ sequenceDiagram
     API->>DB: run + one queued job per company
     loop every worker thread
         W->>DB: claim job (FOR UPDATE SKIP LOCKED), set lease
-        W->>S: robots.txt, then up to 8 pages (SSRF check on every hop)
+        W->>S: robots.txt, sitemap, then up to 12 pages (SSRF check on every hop)
         W->>DB: save pages (cleaned text + hash)
         W->>W: select passages (<= 12,000 chars)
         W->>AI: prompt with passages in untrusted tags
@@ -151,7 +151,17 @@ finished jobs / total, from the database.
 
 Proof: scenarios A (hard kill), F (save fails half-way), G (concurrent edits), I (cancel) in `docs/evidence/`.
 
-## 6. AI pipeline
+## 6. Page selection (crawler)
+
+Candidates = links on fetched pages + URLs from the site's sitemap (robots.txt `Sitemap:` lines or
+`/sitemap.xml`, one nested index level, max 3 files x 500 KB, same SSRF-checked fetch, same site only). Each
+candidate gets weighted hints per category group from its URL path + link text (whole words). Selection is
+deterministic: first **one page per group** (agronomy, grain, energy, feed, gas station, retail store, locations -
+the strongest and most specific candidate), then the rest of the 12-page budget **by score minus 3 per page already
+fetched from the same folder**; blog / news / careers last. Why: one big section must not use the whole budget
+(found on the live site: Agfinity's 8 slots went to 7 agronomy pages; `docs/evidence/crawl_coverage_improvement.md`).
+
+## 6b. AI pipeline
 
 ```mermaid
 flowchart LR
@@ -203,7 +213,7 @@ flowchart LR
 | Threat | Defence |
 |---|---|
 | SSRF (a "website" pointing at 127.0.0.1, 10.x, 169.254.169.254, ...) | only http/https, no `user:pass@`, every resolved IP must be public, redirects followed by hand and re-checked per hop; unsafe start URL = permanent `BLOCKED_UNSAFE` |
-| Abusive crawling | robots.txt respected (RFC 9309: 4xx = allow, 5xx/unreachable = disallow); 8 pages, depth 2, 1.5 MB/page, 5 MB/site, 120 s per site, one request at a time per site |
+| Abusive crawling | robots.txt respected (RFC 9309: 4xx = allow, 5xx/unreachable = disallow); 12 pages, depth 2, 1.5 MB/page, 5 MB/site (sitemaps included; max 3 sitemap files x 500 KB), 120 s per site, one request at a time per site |
 | Prompt injection | page text = data inside untrusted tags; validation requires real verbatim evidence; obeying an injection gets downgraded (tested) |
 | Unauthorised access | JWT login (HS256, 8 h); every `/api` route needs a user; every change needs the reviewer role; role/active re-read from the DB on every request |
 | Password guessing | bcrypt; same 401 for unknown email and wrong password (dummy-hash timing); login rate limit 10/min per IP |

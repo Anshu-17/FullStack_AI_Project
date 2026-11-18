@@ -5,7 +5,7 @@
 | Data | Where | Why |
 |---|---|---|
 | Company name, website, canonical domain | `companies` | the list being researched (from uploads) |
-| Cleaned visible text of up to 8 public pages per company per scan (max 50,000 characters each) + SHA-256 | `pages.text_content` | to verify quotes and let reviewers see the source |
+| Cleaned visible text of up to 12 public pages per company per scan (max 50,000 characters each) + SHA-256 | `pages.text_content` | to verify quotes and let reviewers see the source |
 | Short verbatim quotes (max 300 characters) + source URL | `evidence` | the evidence behind each answer |
 | Answers, explanations, model / prompt / policy versions | `classifications` | results and their provenance |
 | Reviewer corrections with reason, reviewer id, time | `overrides` | audit trail (append-only) |
