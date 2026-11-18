@@ -10,7 +10,8 @@ PostgreSQL, a lease-based background worker, Gemini + Groq, and a Streamlit UI.
 https://bep-api.onrender.com/docs - log in as `reviewer@demo.local` or
 `viewer@demo.local` (passwords shared privately). Free hosting sleeps when idle: the first load can take ~1 minute.
 
-**Video walkthrough (Loom):** https://www.loom.com/share/9a1d51cb8e4e41a08729343b01b293ea
+**Video walkthrough (Loom):** https://www.loom.com/share/9a1d51cb8e4e41a08729343b01b293ea ·
+**Slides:** [ppt/Business Evidence Platform – Walkthrough.pptx](ppt/Business%20Evidence%20Platform%20%E2%80%93%20Walkthrough.pptx)
 
 **Start here:** [docs/submission-summary.md](docs/submission-summary.md) (one page) ·
 [docs/status-matrix.md](docs/status-matrix.md) (built / partial / not built) ·
@@ -26,31 +27,113 @@ https://bep-api.onrender.com/docs - log in as `reviewer@demo.local` or
 | `sample-data/` | labelled fixtures, real-pilot company list, generated 1,000-row CSV |
 | `scripts/` | evaluation, real-site pilot, load test, bulk CSV generator |
 | `docs/` | design, API, decisions, evidence, deployment, privacy, limitations |
+| `ppt/` | presentation slides (walkthrough deck) |
 
-## Quick start (local, without Docker)
+## Run it yourself (clone and set up)
 
-Prerequisites: Python 3.11+ (developed on 3.13), PostgreSQL 16 or newer (developed on 18), two databases `bep` and
-`bep_test`.
+### Tools you need
+
+| Tool | Version | Why | Get it |
+|---|---|---|---|
+| Git | any | clone the repository | https://git-scm.com/downloads |
+| Python | 3.11 or newer (developed on 3.13) | backend, worker and UI | https://www.python.org/downloads/ |
+| PostgreSQL | 16 or newer (developed on 18) | database + job queue | https://www.postgresql.org/download/ (includes `psql` / `createdb`) |
+| An AI API key | free tier is enough | the classification step | Gemini: https://aistudio.google.com/apikey · Groq: https://console.groq.com/keys (one is enough; both = fallback) |
+| Docker Desktop | optional | run everything with one command instead | https://www.docker.com/products/docker-desktop/ |
+
+Three terminals are used: API, worker, UI. Commands are shown for macOS / Linux (bash); the Windows PowerShell
+version is given where it differs.
+
+### 1. Clone
 
 ```bash
-# backend (terminal 1: API)
-cd backend
-python -m venv .venv && source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -r requirements.txt -r requirements-dev.txt
-cp .env.example .env                                     # set DATABASE_URL, JWT_SECRET, AI keys
-alembic upgrade head                                     # create tables
-python -m app.db.seed                                    # policy v1 + demo users (prints generated passwords ONCE)
-uvicorn app.main:app --reload                            # http://localhost:8000  (docs: /docs)
-
-# worker (terminal 2, same venv, from backend/)
-python -m app.worker.main
-
-# UI (terminal 3)
-cd frontend
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt -r requirements-dev.txt
-streamlit run app.py                                     # http://localhost:8501 (API_URL if not localhost:8000)
+git clone https://github.com/Anshu-17/FullStack_AI_Project.git
+cd FullStack_AI_Project
 ```
+
+### 2. Create the databases
+
+```bash
+createdb -U postgres bep          # the app's database
+createdb -U postgres bep_test     # only needed to run the tests
+```
+(Or in `psql` / pgAdmin: `CREATE DATABASE bep;` and `CREATE DATABASE bep_test;`. On Windows, `createdb` is in
+`C:\Program Files\PostgreSQL\<version>\bin` if it is not on your PATH.)
+
+### 3. Backend: install and configure (terminal 1)
+
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate                     # Windows PowerShell: .venv\Scripts\Activate.ps1
+pip install -r requirements.txt -r requirements-dev.txt
+cp .env.example .env                          # Windows: copy .env.example .env
+python -c "import secrets; print(secrets.token_urlsafe(48))"   # copy the output into JWT_SECRET
+```
+
+Now open `backend/.env` and fill in the values marked `<FILL IN>` (the file explains each one):
+
+```ini
+DATABASE_URL=postgresql+psycopg://postgres:YOUR_POSTGRES_PASSWORD@localhost:5432/bep
+JWT_SECRET=PASTE_A_LONG_RANDOM_STRING_HERE
+GOOGLE_API_KEY=YOUR_GEMINI_API_KEY        # and/or
+GROQ_API_KEY=YOUR_GROQ_API_KEY
+SEED_REVIEWER_PASSWORD=                   # optional: choose demo passwords, or leave blank to get random ones
+SEED_VIEWER_PASSWORD=
+```
+
+`.env` is git-ignored: never commit it. Then create the tables and the demo accounts, and start the API:
+
+```bash
+alembic upgrade head          # create the tables (repeat after every pull: it only applies new migrations)
+python -m app.db.seed         # policy v1 + reviewer@demo.local / viewer@demo.local (prints random passwords ONCE if blank)
+uvicorn app.main:app --reload # API on http://localhost:8000 - check http://localhost:8000/ready and /docs
+```
+
+### 4. Worker (terminal 2)
+
+The API only stores requests; the worker does the crawling and AI work.
+
+```bash
+cd backend
+source .venv/bin/activate     # Windows: .venv\Scripts\Activate.ps1
+python -m app.worker.main     # Ctrl+C stops it safely; jobs in progress are picked up again later
+```
+
+### 5. UI (terminal 3)
+
+```bash
+cd frontend
+python -m venv .venv
+source .venv/bin/activate     # Windows: .venv\Scripts\Activate.ps1
+pip install -r requirements.txt -r requirements-dev.txt
+streamlit run app.py          # http://localhost:8501
+```
+
+The UI calls the API at `http://localhost:8000`. If yours runs elsewhere, set `API_URL` first
+(`export API_URL=http://host:8000`, PowerShell: `$env:API_URL="http://host:8000"`).
+
+### 6. Try it
+
+1. Open http://localhost:8501 and log in as `reviewer@demo.local` with the password from step 3.
+2. **Add companies** -> one website (e.g. `Agtegra Cooperative`, `https://www.agtegra.com`) -> **Start research for
+   this company**, or upload `sample-data/real_companies.csv`.
+3. **Runs** shows progress (about 30-60 s per company); then **Companies** -> open a company to see the answers and
+   their verified quotes. Correct an answer, export CSV.
+
+Without the UI: `python -m app.classifier.cli https://www.example.com --name "Example" --quiet` (in `backend/`,
+venv active) crawls and classifies one website and prints the result.
+
+### Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| `connection refused` / `password authentication failed` | PostgreSQL running? `DATABASE_URL` user, password and database name correct? |
+| `/ready` says the database is missing tables | run `alembic upgrade head` in `backend/` |
+| UI: "Can't reach the backend" | start the API (step 3) or set `API_URL` |
+| Jobs stay `queued` | start the worker (step 4) |
+| Jobs fail with `AI_UNAVAILABLE` / `AI_RATE_LIMITED` | check the API keys; free tiers have daily / per-minute limits - wait or add the second provider |
+| Forgot the demo passwords | set `SEED_REVIEWER_PASSWORD` in `.env` and run `python -m app.db.seed` again |
 
 ### Environment variables (`backend/.env`, template: `backend/.env.example`)
 
@@ -73,10 +156,11 @@ rows with duplicates and invalid entries), `sample-data/labelled_fixtures.csv` (
 One website end to end without the API / worker: `python -m app.classifier.cli https://www.example.com --name "Example" --quiet`
 (in `backend/`).
 
-## Quick start (Docker)
+## Quick start (Docker, alternative to steps 2-5)
 
 ```bash
-cp backend/.env.example backend/.env       # edit values
+git clone https://github.com/Anshu-17/FullStack_AI_Project.git && cd FullStack_AI_Project
+cp backend/.env.example backend/.env       # fill in JWT_SECRET and an AI key (DATABASE_URL is set by compose)
 docker compose up --build                   # Postgres + API (runs migrations) + worker + UI
 docker compose exec api python -m app.db.seed
 ```
@@ -92,14 +176,19 @@ Supabase (Postgres) + Render (two free Docker web services, Blueprint `render.ya
 ## Tests
 
 ```bash
-cd backend
-pytest                            # 250 tests against the bep_test database (TEST_DATABASE_URL)
+cd backend                        # backend venv active
+# the tests use a separate database; default postgresql+psycopg://postgres:devpass@localhost:5432/bep_test
+export TEST_DATABASE_URL=postgresql+psycopg://postgres:YOUR_POSTGRES_PASSWORD@localhost:5432/bep_test
+#   PowerShell: $env:TEST_DATABASE_URL="postgresql+psycopg://postgres:YOUR_POSTGRES_PASSWORD@localhost:5432/bep_test"
+pytest                            # 263 tests (crawling and AI are faked - no network, no AI cost)
 ruff check app tests migrations
 alembic check                     # models and migrations in sync
 
-cd ../frontend
-pytest                            # 12 UI tests (backend faked with respx)
+cd ../frontend                    # frontend venv active
+pytest                            # 22 UI tests (backend faked with respx)
 ```
+
+The test run wipes and re-creates `bep_test` - never point `TEST_DATABASE_URL` at your real database.
 
 Local fixture websites for controlled demos: `python fixtures/server.py`, then start the worker with the TEST-ONLY
 settings `CRAWL_FIXTURE_SERVER=127.0.0.1:8765 CRAWL_ALLOWED_PRIVATE_HOSTS=*.fixture.test` (command environment only;
@@ -120,7 +209,8 @@ ignored in production). `AI_PROVIDER=fake` gives a deterministic keyword "AI" fo
 | [privacy.md](docs/privacy.md) | what is stored, retention, AI provider data |
 | [crm-mapping.md](docs/crm-mapping.md) | proposed CRM field mapping (not built) |
 | [deployment.md](docs/deployment.md) | Supabase + Render step by step |
-| [loom-script.md](docs/loom-script.md) | video walkthrough outline with demo commands |
+| [loom-script.md](docs/loom-script.md) | video walkthrough outline with demo commands ([Loom video](https://www.loom.com/share/9a1d51cb8e4e41a08729343b01b293ea)) |
+| [Walkthrough slides](ppt/Business%20Evidence%20Platform%20%E2%80%93%20Walkthrough.pptx) | presentation deck (PowerPoint) |
 | [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) | license of every pinned dependency (lockfiles: `*/requirements.lock.txt`) |
 
 ## Database migrations
