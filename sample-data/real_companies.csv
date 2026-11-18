@@ -1,0 +1,16 @@
+company_name,website,source
+Agtegra Cooperative,https://www.agtegra.com,ZoomInfo + issuu company profiles; crawled successfully in earlier runs
+AGRILAND FS Inc.,https://www.agrilandfs.com,LandCAN + company profiles list agrilandfs.com (may redirect to fscooperatives.com like Insight FS)
+Insight FS,https://www.insightfs.com,NCFC member listing + AgriTech Tomorrow press article; redirects to fscooperatives.com/insightfs
+Top Ag Cooperative,https://www.topag.net,CropLife Top 100 company listing
+Mid Kansas Cooperative (MKC),https://www.mkcoop.com,issuu publisher page + NCFC member listing
+Innovative Ag Services (IAS),https://www.innovativeag.com,company's own pages (innovativeag.com/about)
+Valley Agronomics (Valley Ag),https://www.valleyag.com,company's own pages (valleyag.com/about)
+Agfinity Inc.,https://www.agfinityinc.com,LandCAN + BizWest; SAM.gov lists agfinityinc.com
+ALCIVIA Cooperative,https://www.alcivia.com,CropLife Top 100 + employer profile list alcivia.com; agronomy unit sold 2025-26
+Grow West,https://www.growwest.com,Rice Farming name-change article + ZoomInfo (private retailer - not a cooperative)
+River Valley Cooperative (RVC),https://www.rivervalleycoop.com,Craft company profile + CoBank customer story
+Asmus Farm Supply Inc.,https://www.afschem.com,2017 ARA award application + FMCSA registration + company profile list afschem.com
+Star Oilco,https://www.staroilco.net,company's own pages (staroilco.net/pacificpride) - extra: cardlock / fuel
+Kent Nutrition Group,https://www.kentnutritiongroup.com,company's own pages (kentnutritiongroup.com) - extra: feed-focused
+Mozilla,https://www.mozilla.org,company's own pages (mozilla.org/about) - extra: clearly NOT agricultural

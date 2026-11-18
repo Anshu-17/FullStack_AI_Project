@@ -1,6 +1,12 @@
 # Quality evaluation - labelled fixture websites (SMALL SYNTHETIC SET)
 
 > **Synthetic data.** Hand-written fixture pages served locally (`fixtures/sites/`), labelled from the brief's rules (`sample-data/labelled_fixtures.csv`). This checks that the rules are applied; it is NOT an accuracy measure on real websites. Sample: 9 sites x 6 site categories = 54 answers.
+>
+> **Read the scores with this caveat.** Prompt `p3` was revised AFTER seeing a `p2` miss on this SAME fixture set
+> (run #9: 53/54, see "History" at the end). So the 54/54 below measures how well the prompt now fits our own 9
+> synthetic sites - it is not real-world accuracy, and there is **no held-out test set**. The numbers are
+> agreement with our labels on a tiny, clean, hand-written set; they do not mean the system is "100% accurate".
+> The real-world quality signal is the manual evidence audit of the real-site pilot (`real_site_pilot.md`).
 
 - Date: 2026-11-18 08:53 UTC; run #11 (81 s)
 - Pipeline: real crawl (local fixture server) -> real AI -> validation; prompt `p3`, policy `v1`; AI order: google then groq
@@ -22,7 +28,7 @@
 | cardlock-fuel.fixture.test | completed |  |
 | prompt-injection.fixture.test | completed |  |
 
-## Precision / recall per category (positive = yes)
+## Precision / recall per category (positive = yes) - on the 9 synthetic sites only, see caveat
 
 | category | precision | recall | exact match |
 |---|---|---|---|
@@ -33,7 +39,7 @@
 | gas_station | 100% (2/2) | 100% (2/2) | 100% (9/9) |
 | retail_store | 100% (2/2) | 100% (2/2) | 100% (9/9) |
 
-**Overall exact match (expected status == predicted status): 100% (54/54)**
+**Overall exact match (expected status == predicted status): 54/54 on the 9 synthetic fixture sites the prompt was tuned on (no held-out set - see the caveat at the top; not a real-world accuracy figure)**
 
 ## Confusion tables (rows = expected, columns = predicted)
 
@@ -135,7 +141,7 @@ Judgement column: filled in by hand after reading the quote (OK = the quote supp
 
 **Audit summary (manual, by the developer):** 27 quotes - 26 OK, 1 weak, 0 wrong. Every yes answer has at least one quote that clearly supports it; weak quotes are extra quotes attached next to a good one.
 
-**History (both runs are real):** the first evaluation (run #9, prompt `p2`) scored 53/54 (98%): `outdated-elevator` grain came back `not_found` instead of `possible` - the model read 'closed in 2015' as no evidence, and the same happened in the live scenario H run. Its audit also found one WRONG quote (cardlock-fuel energy quoted 'We do not offer fuel delivery.'). Prompt `p3` added one explicit rule (outdated evidence -> possible, quote it). This report is the re-run with `p3` (run #11).
+**History (both runs are real):** the first evaluation (run #9, prompt `p2`) scored 53/54 (98%): `outdated-elevator` grain came back `not_found` instead of `possible` - the model read 'closed in 2015' as no evidence, and the same happened in the live scenario H run. Its audit also found one WRONG quote (cardlock-fuel energy quoted 'We do not offer fuel delivery.'). Prompt `p3` added one explicit rule (outdated evidence -> possible, quote it). This report is the re-run with `p3` (run #11) on the SAME 9 sites - so the improvement from 53/54 to 54/54 is a fix fitted to this set, not evidence of general accuracy. A fair accuracy estimate would need fresh labelled sites that were not used while changing the prompt.
 
 **Observed during this run:** Gemini answered HTTP 429 (rate limit) for the cardlock-fuel job; the pipeline backed off and retried successfully on Google (no fallback needed). See the AI calls line above.
 
