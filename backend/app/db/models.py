@@ -194,6 +194,10 @@ class Job(Base):
         Index("ix_jobs_claimable", "status", "next_attempt_at"),
         # Fast lookup of expired leases (crash recovery)
         Index("ix_jobs_lease", "lease_expires_at", postgresql_where=text("status = 'running'")),
+        # At most ONE active (queued/running) job per company across all runs: two runs started at the
+        # same moment cannot both research the same company (scenario C), enforced by the database.
+        Index("uq_jobs_one_active_per_company", "company_id", unique=True,
+              postgresql_where=text("status IN ('queued', 'running')")),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)

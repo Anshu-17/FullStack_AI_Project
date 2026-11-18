@@ -1,5 +1,8 @@
 """App settings, read from environment variables / .env (never hard-code secrets)."""
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+MIN_PRODUCTION_JWT_SECRET_CHARS = 32
 
 
 class Settings(BaseSettings):
@@ -63,9 +66,23 @@ class Settings(BaseSettings):
     crawl_allowed_private_hosts: str = ""
 
     # --- Worker (section 4.5) ---
-    worker_concurrency: int = 4
-    job_lease_seconds: int = 120
+    worker_concurrency: int = 2   # jobs processed in parallel by one worker process (free-tier AI limits)
+    job_lease_seconds: int = 120  # a job whose lease is not renewed for this long is presumed abandoned
     job_max_attempts: int = 3
+
+    @model_validator(mode="after")
+    def refuse_weak_secret_in_production(self):
+        """In production, a missing / default / short JWT secret would let anyone forge logins: refuse to start."""
+        if self.environment == "production" and (
+            not self.jwt_secret or self.jwt_secret == "change-me"
+            or len(self.jwt_secret) < MIN_PRODUCTION_JWT_SECRET_CHARS
+        ):
+            raise ValueError(
+                f"JWT_SECRET must be set to a random string of at least {MIN_PRODUCTION_JWT_SECRET_CHARS} characters "
+                "when ENVIRONMENT=production. Generate one with: "
+                'python -c "import secrets; print(secrets.token_urlsafe(48))"'
+            )
+        return self
 
     @property
     def cors_origin_list(self) -> list[str]:

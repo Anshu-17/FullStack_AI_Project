@@ -75,6 +75,50 @@ def crawler_settings(monkeypatch):
     return change
 
 
+APP_TABLES = ("ai_usage, evidence, classifications, overrides, pages, job_events, attempts, jobs, runs, "
+              "upload_rows, uploads, companies, policy_versions, users")
+
+
+@pytest.fixture()
+def fresh_db():
+    """For tests that need REAL commits on several connections (worker threads, concurrent claims).
+
+    The normal `db` fixture rolls everything back, but other connections can't see uncommitted data.
+    So these tests commit for real into bep_test, and the tables are emptied before and after.
+    Never combine with the `db` fixture in one test.
+    """
+    from sqlalchemy import text
+
+    from app.db.models import PolicyVersion
+    from app.db.session import SessionLocal
+
+    def wipe():
+        with engine.begin() as conn:
+            conn.execute(text(f"TRUNCATE {APP_TABLES} RESTART IDENTITY CASCADE"))
+
+    wipe()
+    with SessionLocal() as s:
+        s.add(PolicyVersion(version="v1", description="test policy", rules={}, is_active=True))
+        s.commit()
+    yield SessionLocal
+    wipe()
+
+
+@pytest.fixture()
+def api(db):
+    """HTTP client for the API, using the test's rolled-back session."""
+    from fastapi.testclient import TestClient
+
+    from app.db.deps import get_db
+    from app.main import app
+
+    app.dependency_overrides[get_db] = lambda: db
+    try:
+        yield TestClient(app)
+    finally:
+        app.dependency_overrides.clear()
+
+
 @pytest.fixture()
 def db():
     """A session whose changes are rolled back after the test."""

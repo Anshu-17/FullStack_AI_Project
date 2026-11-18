@@ -3,6 +3,10 @@
   load pages -> select passages -> build prompt -> call AI (retries + fallback)
   -> validate -> add Accounting rule -> check human overrides -> save in ONE transaction
 
+run_classification() does everything except the final save; save_classifications() adds the
+rows to a transaction the CALLER controls. The worker saves them together with the job's
+final status after checking it still owns the job's lease (see worker/process.py).
+
 Failure modes (raised, nothing classified is saved):
 - NoContentError   (NO_CONTENT):     the crawl produced no usable text. This is a crawl
                                      failure, NOT "not_found" for every category. No AI call.
@@ -67,6 +71,7 @@ class ClassifyResult:
     est_cost_usd: Decimal | None = None
     latency_ms: int = 0
     conflicts: list[str] = field(default_factory=list)
+    decisions: list[CheckedDecision] = field(default_factory=list)  # the 7 answers, not saved yet
 
 
 # ------------------------------------------------------------------ cost
@@ -185,6 +190,39 @@ def latest_overrides(db, company_id: int) -> dict[str, str]:
 # ------------------------------------------------------------------ the job
 
 def classify_job(db, job_id: int) -> ClassifyResult:
+    """Decide AND save (used by the CLI). The worker instead calls run_classification, then saves
+    the rows together with the job's final status in one fenced transaction (worker/process.py)."""
+    result = run_classification(db, job_id)
+    try:
+        save_classifications(db, job_id, result)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return result
+
+
+def save_classifications(db, job_id: int, result: ClassifyResult) -> None:
+    """Add the 7 Classification rows + their Evidence to the session. Does NOT commit:
+    the caller decides which transaction they belong to."""
+    company_id = db.get(Job, job_id).company_id
+    for d in result.decisions:
+        is_rule = d.provenance == "rule"
+        row = Classification(
+            job_id=job_id, company_id=company_id, category=d.category, status=d.status,
+            provenance=d.provenance, explanation=d.explanation,
+            confidence=None if d.confidence is None else Decimal(str(round(d.confidence, 3))),
+            model_provider=None if is_rule else result.provider, model_name=None if is_rule else result.model,
+            prompt_version=None if is_rule else PROMPT_VERSION, policy_version=POLICY_VERSION,
+            conflicts_with_override=d.category in result.conflicts,
+        )
+        row.evidence = [Evidence(page_id=e.page_id, source_url=e.source_url, quote=e.quote,
+                                 quote_verified=e.quote_verified) for e in d.evidence]
+        db.add(row)
+
+
+def run_classification(db, job_id: int) -> ClassifyResult:
+    """Steps 1-5: everything except saving the classifications. AI usage rows ARE committed as we go."""
     started = time.perf_counter()
     job = db.get(Job, job_id)
     company = job.company
@@ -217,32 +255,14 @@ def classify_job(db, job_id: int) -> ClassifyResult:
             log.info("classify.conflicts_with_override", company_id=company.id, category=d.category,
                      automated=d.status, override=overrides[d.category])
 
-    # 6. Save 7 classifications + their evidence in ONE transaction
-    try:
-        for d in decisions:
-            is_rule = d.provenance == "rule"
-            row = Classification(
-                job_id=job_id, company_id=company.id, category=d.category, status=d.status,
-                provenance=d.provenance, explanation=d.explanation,
-                confidence=None if d.confidence is None else Decimal(str(round(d.confidence, 3))),
-                model_provider=None if is_rule else provider, model_name=None if is_rule else model,
-                prompt_version=None if is_rule else PROMPT_VERSION, policy_version=POLICY_VERSION,
-                conflicts_with_override=d.category in conflicts,
-            )
-            row.evidence = [Evidence(page_id=e.page_id, source_url=e.source_url, quote=e.quote,
-                                     quote_verified=e.quote_verified) for e in d.evidence]
-            db.add(row)
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
-
-    # 7. Summary (tokens/cost over ALL calls for this job, including failed ones)
+    # 6. Summary (tokens/cost over ALL calls for this job, including failed ones).
+    #    Saving the 7 rows is done by the caller (save_classifications) in its own transaction.
     usage_rows = list(db.scalars(select(AIUsage).where(AIUsage.job_id == job_id)))
     costs = [u.est_cost_usd for u in usage_rows]
     counts: dict[str, int] = {}
     for d in decisions:
-        counts[d.status] = counts.get(d.status, 0) + 1
+        status = str(d.status)  # plain "yes"/"possible"/"not_found" (validation may have set an enum member)
+        counts[status] = counts.get(status, 0) + 1
     result = ClassifyResult(
         status_counts=counts,
         needs_review=bool(issues) or bool(conflicts) or any(d.status == ClassStatus.POSSIBLE for d in decisions),
@@ -252,6 +272,7 @@ def classify_job(db, job_id: int) -> ClassifyResult:
         est_cost_usd=None if any(c is None for c in costs) else sum(costs, Decimal(0)),
         latency_ms=int((time.perf_counter() - started) * 1000),
         conflicts=conflicts,
+        decisions=decisions,
     )
     log.info("classify.done", job_id=job_id, provider=provider, statuses=counts,
              needs_review=result.needs_review, issues=len(issues))

@@ -1,7 +1,7 @@
-"""FastAPI entry point.
+"""FastAPI entry point: logging, request IDs, CORS, one error shape, health/readiness, /api routers.
 
-Stage 0: logging, request IDs, CORS, health/readiness.
-Routers for companies, runs, etc. are added in later stages.
+The API never crawls or calls the AI itself: it stores requests (companies, runs, jobs) and
+the background worker (python -m app.worker.main) does the slow work.
 """
 import time
 import uuid
@@ -12,7 +12,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from app.api import stats
+from app.api import companies, runs, stats, uploads
+from app.api.errors import register_error_handlers
 from app.config import settings
 from app.db.session import engine
 from app.log_config import get_logger, setup_logging
@@ -35,8 +36,11 @@ app.add_middleware(
 )
 
 
-# JSON API routes live under /api (more routers are added stage by stage)
-app.include_router(stats.router, prefix="/api")
+register_error_handlers(app)  # {"error": {"code", "message", "details"}} for every error
+
+# JSON API routes live under /api
+for router in (uploads.router, companies.router, runs.router, stats.router):
+    app.include_router(router, prefix="/api")
 
 
 @app.middleware("http")

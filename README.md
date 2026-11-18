@@ -51,6 +51,38 @@ streamlit run app.py                                    # http://localhost:8501
 ```
 Set `API_URL` if the backend is not on `http://localhost:8000`.
 
+## Background worker
+
+The API only stores requests; the worker does the crawling and AI work. Start it in its own terminal
+(backend venv active, from `backend/`):
+
+```bash
+python -m app.worker.main
+```
+
+- Runs `WORKER_CONCURRENCY` jobs in parallel (default 2) and logs JSON lines with `worker_id`, `job_id`, `run_id`, `attempt`.
+- Ctrl+C stops claiming new jobs and waits up to 30 s for jobs in progress.
+- Safe to kill at any time: the job's lease (`JOB_LEASE_SECONDS`, default 120) expires and the job is picked up again.
+- Start research with `POST /api/runs` (see http://localhost:8000/docs), e.g.
+  `{"company_ids": [1, 2]}` with an `Idempotency-Key` header, then watch `GET /api/runs/{id}`.
+
+Short lease for a crash demo, for one command only (`.env` unchanged):
+
+```bash
+JOB_LEASE_SECONDS=30 python -m app.worker.main                    # macOS / Linux
+```
+```powershell
+$env:JOB_LEASE_SECONDS=30; python -m app.worker.main               # Windows PowerShell (this window only)
+```
+
+Try one website end to end without the worker or API (creates a run + job, prints the answers):
+
+```bash
+python -m app.classifier.cli https://www.example.com --name "Example Co-op" --quiet
+```
+
+Evidence of the resilience scenarios: `docs/evidence/` (worker crash, duplicates, classifier runs).
+
 ## Tests
 
 ```bash

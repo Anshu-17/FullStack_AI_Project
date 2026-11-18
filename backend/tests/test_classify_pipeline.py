@@ -146,6 +146,8 @@ def test_invented_quote_is_dropped_and_yes_becomes_not_found(db, job, monkeypatc
     assert grain.evidence == []
     assert "could not be verified" in grain.explanation
     assert result.needs_review
+    assert all(type(k) is str for k in result.status_counts)  # plain strings even after a downgrade
+    assert result.status_counts["not_found"] == 3
     assert any("dropped a quote" in i for i in result.issues)
 
 
