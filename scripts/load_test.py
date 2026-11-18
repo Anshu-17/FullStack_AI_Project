@@ -69,7 +69,8 @@ def main(out: Path) -> None:
 
     while True:  # progress straight from the API (which reads the database)
         r = client.get(f"/api/runs/{run_id}", headers=h).json()
-        print(f"  {time.perf_counter() - started:6.1f} s  {r['status']:<22} {r['progress']['done']}/{r['progress']['total']}")
+        done, total = r["progress"]["done"], r["progress"]["total"]
+        print(f"  {time.perf_counter() - started:6.1f} s  {r['status']:<22} {done}/{total}")
         if r["status"] in ("completed", "completed_with_errors", "failed", "cancelled"):
             break
         time.sleep(5)

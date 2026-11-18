@@ -97,6 +97,23 @@ python -m app.classifier.cli https://www.example.com --name "Example Co-op" --qu
 
 Evidence of the resilience scenarios: `docs/evidence/` (worker crash, duplicates, classifier runs).
 
+## Local fixture websites (tests and demos)
+
+```bash
+python fixtures/server.py          # http://127.0.0.1:8765, sites in fixtures/sites/<name>/
+```
+
+Fixture companies use `http://<site>.fixture.test/` (`.test` is reserved, never a real website). To let the
+crawler reach them, start the worker with TEST-ONLY settings in that command's environment (never in `.env`;
+both are ignored when `ENVIRONMENT=production`):
+
+```bash
+CRAWL_FIXTURE_SERVER=127.0.0.1:8765 CRAWL_ALLOWED_PRIVATE_HOSTS=*.fixture.test python -m app.worker.main
+```
+
+`AI_PROVIDER=fake` (deterministic keyword provider, no network) is also available outside production for load
+tests. Results of all proof runs (scenarios A-J, evaluation, real-site pilot, scale tests): `docs/evidence/README.md`.
+
 ## Tests
 
 ```bash

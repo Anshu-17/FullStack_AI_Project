@@ -29,7 +29,7 @@ from sqlalchemy.orm import selectinload  # noqa: E402
 
 from app.classifier.taxonomy import POLICY_VERSION, PROMPT_VERSION, SITE_CATEGORY_NAMES  # noqa: E402
 from app.config import settings  # noqa: E402
-from app.db.models import AIUsage, Classification, Company, Job, Run  # noqa: E402
+from app.db.models import AIUsage, Classification, Job, Run  # noqa: E402
 from app.db.session import SessionLocal  # noqa: E402
 from app.services.ingest import ingest_rows  # noqa: E402
 from app.services.runs import create_run  # noqa: E402
@@ -152,7 +152,8 @@ def evaluate(run_id: int, labels: list[dict]) -> str:
 
     lines += ["## Confusion tables (rows = expected, columns = predicted)", ""]
     for cat, conf in confusion_rows:
-        lines += [f"**{cat}**", "", "| expected \\ predicted | yes | possible | not_found | missing |", "|---|---|---|---|---|"]
+        lines += [f"**{cat}**", "", "| expected \\ predicted | yes | possible | not_found | missing |",
+                  "|---|---|---|---|---|"]
         for e in STATUSES:
             lines.append(f"| {e} | " + " | ".join(str(conf[(e, p)]) for p in (*STATUSES, "missing")) + " |")
         lines.append("")

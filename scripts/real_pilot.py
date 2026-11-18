@@ -62,8 +62,8 @@ def main(out: Path, report_run_id: int | None = None) -> None:
 
 
 def report(out: Path, run_id: int, upload_note: str) -> None:
-    sources = {row["website"].split("//")[1].removeprefix("www.").lower(): row
-               for row in csv.DictReader(open(CSV_PATH, encoding="utf-8"))}
+    with open(CSV_PATH, encoding="utf-8") as f:
+        sources = {row["website"].split("//")[1].removeprefix("www.").lower(): row for row in csv.DictReader(f)}
     with SessionLocal() as db:
         run = db.get(Run, run_id)
         jobs = db.scalars(select(Job).where(Job.run_id == run_id).order_by(Job.id)).all()
@@ -104,8 +104,8 @@ def report(out: Path, run_id: int, upload_note: str) -> None:
         "## Run data (generated from the database by `scripts/real_pilot.py`)",
         "",
         f"- Date: {datetime.now(UTC):%Y-%m-%d %H:%M} UTC; {upload_note}; run #{run_id}",
-        f"- Machine: {platform.platform()}, Python {platform.python_version()}, PostgreSQL 18; one worker process (no test hooks; "
-        f"threads: see the run notes); prompt `{settings.prompt_version}`, "
+        f"- Machine: {platform.platform()}, Python {platform.python_version()}, PostgreSQL 18; "
+        f"one worker process (no test hooks; threads: see the run notes); prompt `{settings.prompt_version}`, "
         f"policy `{settings.policy_version}`; AI order: {settings.ai_provider} then {settings.ai_fallback_providers}",
         f"- Total time (run created -> finished): {total_s:.0f} s; jobs by status: {by_status}",
         "- AI calls: " + "; ".join(f"`{p}/{m}` {o}: {n} (tokens in/out {ti}/{to})" for p, m, o, n, ti, to in ai),
@@ -113,7 +113,8 @@ def report(out: Path, run_id: int, upload_note: str) -> None:
         "Answers: Y = yes, P = possible, - = not_found, ? = no answer (job failed). Order: "
         "Acct Agro Grain Energy Feed Gas Retail (Accounting = business rule).",
         "",
-        "| company | domain | job | attempts | pages ok | other page outcomes | homepage redirected to | answers | error | AI |",
+        "| company | domain | job | attempts | pages ok | other page outcomes | homepage redirected to | answers "
+        "| error | AI |",
         "|---|---|---|---|---|---|---|---|---|---|",
     ]
     for name, domain, status, att, ok, outc, redir, st, err, prov in rows:
