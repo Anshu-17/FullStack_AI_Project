@@ -3,7 +3,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    # env_ignore_empty: "AI_PRICE_INPUT_PER_MTOK=" (blank) means "use the default", not "invalid number".
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore", env_ignore_empty=True)
 
     # --- General ---
     environment: str = "development"  # development | test | production
@@ -24,17 +25,28 @@ class Settings(BaseSettings):
     seed_viewer_email: str = "viewer@demo.local"
     seed_viewer_password: str = ""
 
-    # --- AI providers (leave blank the ones you don't use) ---
-    ai_provider: str = "anthropic"  # anthropic | google | xai
-    ai_fallback_providers: str = ""  # e.g. "google,xai"
-    ai_model: str = ""
-    anthropic_api_key: str = ""
+    # --- AI providers: google | groq | anthropic | xai | openai ---
+    # A provider is only used when BOTH its API key and its model are set.
+    ai_provider: str = "google"          # tried first
+    ai_fallback_providers: str = "groq"  # comma-separated, tried in order if the primary fails
+    ai_timeout_seconds: float = 60
+    google_model: str = "gemini-2.5-flash"
     google_api_key: str = ""
+    groq_model: str = "openai/gpt-oss-20b"  # via Groq's OpenAI-compatible API
+    groq_api_key: str = ""
+    anthropic_model: str = ""
+    anthropic_api_key: str = ""
+    xai_model: str = ""
     xai_api_key: str = ""
+    openai_model: str = ""
+    openai_api_key: str = ""
+    # USD per million tokens, for the cost estimate. Unset = cost recorded as unknown (NULL), never guessed.
+    ai_price_input_per_mtok: float | None = None
+    ai_price_output_per_mtok: float | None = None
 
     # --- Classification policy ---
     policy_version: str = "v1"
-    prompt_version: str = "p1"
+    prompt_version: str = "p2"  # p2: quotes must be one continuous span (no "...", no stitching)
 
     # --- Crawl limits (section 4.3) ---
     crawl_max_pages: int = 8                # pages per website (homepage + the most relevant links)

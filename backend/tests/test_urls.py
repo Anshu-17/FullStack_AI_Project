@@ -1,7 +1,14 @@
 """URL helpers: one spelling per page and per company domain."""
 import pytest
 
-from app.crawler.urls import canonical_domain, is_probably_page, normalize_page_url, same_site
+from app.crawler.urls import (
+    canonical_domain,
+    is_probably_page,
+    normalize_page_url,
+    path_prefix,
+    same_site,
+    under_path,
+)
 
 
 def test_same_page_spelled_differently_normalizes_to_one_url():
@@ -55,6 +62,18 @@ def test_same_site():
     assert same_site("https://shop.coop.example/a", "coop.example")
     assert not same_site("https://other.example/a", "coop.example")
     assert not same_site("https://evilcoop.example/a", "coop.example")  # suffix match must be a whole label
+
+
+def test_path_prefix_and_under_path():
+    assert path_prefix("https://fscooperatives.com/insightfs") == "/insightfs"
+    assert path_prefix("https://fscooperatives.com/insightfs/") == "/insightfs"
+    assert path_prefix("https://x.example/a/home.aspx") == "/a"
+    assert path_prefix("https://x.example/") == "/"
+    assert under_path("https://x.example/insightfs/seed", "/insightfs")
+    assert under_path("https://x.example/insightfs", "/insightfs")
+    assert not under_path("https://x.example/insightfs2/seed", "/insightfs")
+    assert not under_path("https://x.example/othercoop", "/insightfs")
+    assert under_path("https://x.example/anything", "/")
 
 
 @pytest.mark.parametrize("url", ["https://c.example/report.pdf", "https://c.example/logo.PNG", "https://c.example/a.docx",

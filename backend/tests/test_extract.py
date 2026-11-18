@@ -18,6 +18,19 @@ def test_script_style_and_hidden_content_removed():
         assert removed not in text
 
 
+def test_menus_removed_from_text_but_links_kept_and_footer_kept():
+    html = """<header><a href="/home">Main Utilities</a></header>
+    <nav><a href="/grain">Grain</a><a href="/energy">Energy</a></nav>
+    <main><p>We deliver propane.</p></main>
+    <footer><p>Store hours: Mon-Fri 7-5, 101 Main St</p></footer>"""
+    _, text, links = extract(html, BASE)
+    assert "Main Utilities" not in text and "Energy" not in text  # menu text gone
+    assert "We deliver propane." in text
+    assert "Store hours: Mon-Fri 7-5, 101 Main St" in text      # footer kept (store evidence)
+    assert [u for u, _ in links] == ["https://coop.example/home", "https://coop.example/grain",
+                                     "https://coop.example/energy"]  # menu links still followed
+
+
 def test_inline_tags_stay_on_one_line_and_blocks_split_lines():
     html = ("<div><p>We buy <b>corn</b> and <a href='/soy'>soybeans</a>.</p>"
             "<ul><li>Propane</li><li>Diesel</li></ul></div>")

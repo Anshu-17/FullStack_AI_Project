@@ -23,7 +23,14 @@ from app.config import settings
 from app.crawler.extract import extract
 from app.crawler.fetch import FetchResult, fetch_page, make_client
 from app.crawler.robots import robots_allows
-from app.crawler.urls import canonical_domain, is_probably_page, normalize_page_url, same_site
+from app.crawler.urls import (
+    canonical_domain,
+    is_probably_page,
+    normalize_page_url,
+    path_prefix,
+    same_site,
+    under_path,
+)
 from app.db.enums import PageOutcome
 from app.log_config import get_logger
 
@@ -52,6 +59,9 @@ class CrawlResult:
     stopped_reason: str = "completed"  # completed | page_limit | byte_limit | deadline | invalid_start_url
     total_bytes: int = 0
     elapsed_ms: int = 0
+    # Set when the homepage redirected to ANOTHER domain, e.g. "https://fscooperatives.com/insightfs".
+    # Only pages under that address are crawled (a shared site may host other companies too).
+    redirected_to: str | None = None
 
 
 def link_priority(url: str, link_text: str) -> int:
@@ -80,6 +90,7 @@ def crawl_site(start_url: str, client: httpx.Client | None = None) -> CrawlResul
 
     own_client = client is None
     client = client or make_client()
+    prefix = "/"  # only follow links under this path; narrowed after a cross-domain homepage redirect
     robots_cache: dict = {}
     order = itertools.count()  # tie-breaker: same priority and depth -> first discovered first
     queue = [(0, 0, next(order), start)]  # (priority, depth, order, url)
@@ -117,9 +128,16 @@ def crawl_site(start_url: str, client: httpx.Client | None = None) -> CrawlResul
             final = normalize_page_url(page_url)
             if final:
                 seen.add(final)  # /about redirected to /about-us: don't fetch /about-us again
-            if depth == 0:
-                # Homepage redirected to another domain (e.g. old name -> new name): follow that site.
-                domain = canonical_domain(page_url) or domain
+            new_domain = canonical_domain(page_url)
+            if depth == 0 and new_domain and new_domain != domain:
+                # The homepage redirected to ANOTHER domain. That may be a shared site hosting several
+                # companies (insightfs.com -> fscooperatives.com/insightfs), so we stay under the
+                # redirect target's path: /insightfs/... yes, /othercoop/... no.
+                domain = new_domain
+                prefix = path_prefix(page_url)
+                result.redirected_to = page_url
+                log.info("crawl.cross_domain_redirect", start_url=start_url, redirected_to=page_url,
+                         domain=domain, path_prefix=prefix)
 
             page.title, page.text, links = extract(page.html, page_url)
             page.html = None  # keep only the cleaned text (raw HTML is not stored)
@@ -128,7 +146,8 @@ def crawl_site(start_url: str, client: httpx.Client | None = None) -> CrawlResul
                 continue  # deep enough: don't queue this page's links
             for link_url, link_text in links:
                 link = normalize_page_url(link_url)
-                if not link or link in seen or not same_site(link, domain) or not is_probably_page(link):
+                if (not link or link in seen or not same_site(link, domain)
+                        or not under_path(link, prefix) or not is_probably_page(link)):
                     continue
                 seen.add(link)
                 heapq.heappush(queue, (link_priority(link, link_text), depth + 1, next(order), link))

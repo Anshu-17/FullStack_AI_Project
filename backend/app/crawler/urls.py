@@ -97,6 +97,23 @@ def same_site(url: str, domain: str) -> bool:
     return host == domain or host.endswith("." + domain)
 
 
+def path_prefix(url: str) -> str:
+    """The 'folder' of a URL: 'https://x.com/insightfs' -> '/insightfs', 'https://x.com/a/home.aspx' -> '/a'."""
+    path = urlsplit(url).path or "/"
+    if "." in path.rsplit("/", 1)[-1]:  # last part looks like a file name -> use its folder
+        path = path.rsplit("/", 1)[0]
+    return path.rstrip("/") or "/"
+
+
+def under_path(url: str, prefix: str) -> bool:
+    """True if the URL's path is `prefix` itself or inside it ('/insightfs/seed' is under '/insightfs',
+    '/insightfs2' is not)."""
+    if prefix == "/":
+        return True
+    path = urlsplit(url).path
+    return path == prefix or path.startswith(prefix + "/")
+
+
 def is_probably_page(url: str) -> bool:
     """False for links to files we do not read (PDF, images, office docs, video, ...)."""
     last_segment = urlsplit(url).path.rsplit("/", 1)[-1].lower()

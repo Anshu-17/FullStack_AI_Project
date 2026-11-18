@@ -13,6 +13,9 @@ log = get_logger("crawler.extract")
 
 # Tags whose content is not visible text (code, styling, embedded documents).
 NON_TEXT_TAGS = ["script", "style", "noscript", "svg", "iframe", "template"]
+# Menus repeated on every page: removed from the TEXT (noise), but their LINKS are still followed.
+# <footer> is kept on purpose: addresses and opening hours there are retail-store evidence.
+BOILERPLATE_TAGS = ["nav", "header"]
 # Block elements start a new line of text; inline ones (<b>, <a>, <span>) don't.
 BLOCK_TAGS = [
     "title", "p", "div", "br", "li", "ul", "ol", "dl", "dt", "dd", "h1", "h2", "h3", "h4", "h5", "h6",
@@ -56,6 +59,10 @@ def _extract(html: str, base_url: str) -> tuple[str | None, str, list[tuple[str,
             continue
         link_text = " ".join(a.get_text(" ").split())[:MAX_LINK_TEXT_CHARS]
         links.append((absolute, link_text))
+
+    # Links were collected from the whole page (menus included); now drop the menus from the text.
+    for tag in soup(BOILERPLATE_TAGS):
+        tag.decompose()
 
     # Text: one line per block element. Newlines inside the HTML source are just
     # formatting, so ALL whitespace inside a block collapses to single spaces

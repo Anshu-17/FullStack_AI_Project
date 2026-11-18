@@ -67,6 +67,38 @@ def test_subdomain_links_are_followed(fake_dns):
 
 
 @respx.mock
+def test_cross_domain_homepage_redirect_stays_under_the_target_path(fake_dns):
+    """insightfs.com -> fscooperatives.com/insightfs: a shared site; other co-ops' pages must not be crawled."""
+    respx.get(f"{SITE}/robots.txt").respond(404)
+    respx.get(f"{SITE}/").respond(301, headers={"Location": "https://umbrella.example/coop"})
+    respx.get("https://umbrella.example/robots.txt").respond(404)
+    respx.get("https://umbrella.example/coop").respond(
+        200, html=links("/coop/grain", "/othercoop/grain", "/coopx/feed", "/coop"))
+    ours = respx.get("https://umbrella.example/coop/grain").respond(200, html="<p>Our grain</p>")
+    sibling = respx.get("https://umbrella.example/othercoop/grain").respond(200, html="<p>Not us</p>")
+    lookalike = respx.get("https://umbrella.example/coopx/feed").respond(200, html="<p>Not us</p>")
+
+    result = crawl_site(SITE)
+
+    assert result.redirected_to == "https://umbrella.example/coop"
+    assert ours.called
+    assert not sibling.called and not lookalike.called
+    assert fetched_urls(result) == [f"{SITE}/", "https://umbrella.example/coop/grain"]
+
+
+@respx.mock
+def test_same_domain_redirect_is_not_a_cross_domain_redirect(fake_dns):
+    respx.get(f"{SITE}/robots.txt").respond(404)
+    respx.get(f"{SITE}/").respond(301, headers={"Location": "https://www.coop.example/"})
+    respx.get("https://www.coop.example/robots.txt").respond(404)
+    respx.get("https://www.coop.example/").respond(200, html=links("/grain"))
+    respx.get("https://www.coop.example/grain").respond(200, html="<p>g</p>")
+    result = crawl_site(SITE)
+    assert result.redirected_to is None
+    assert "https://www.coop.example/grain" in fetched_urls(result)
+
+
+@respx.mock
 def test_relevant_pages_are_fetched_before_blog(fake_dns):
     fake_site({"/": links("/blog", "/contact", "/grain"), "/blog": "<p>b</p>", "/contact": "<p>c</p>",
                "/grain": "<p>g</p>"})
