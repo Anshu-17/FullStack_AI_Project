@@ -8,7 +8,24 @@ PostgreSQL, a lease-based background worker, Gemini + Groq, and a Streamlit UI.
 
 **Live:** UI https://bep-ui-1dt0.onrender.com · API https://bep-api.onrender.com · API docs
 https://bep-api.onrender.com/docs - log in as `reviewer@demo.local` or
-`viewer@demo.local` (passwords shared privately). Free hosting sleeps when idle: the first load can take ~1 minute.
+`viewer@demo.local` (passwords shared privately). Free hosting sleeps when idle: the first load can take ~1 minute
+(see [Getting a 502 error on the live site?](#getting-a-502-error-on-the-live-site) below).
+
+> ### Getting a 502 error on the live site?
+>
+> The backend runs on Render's **free tier**, which puts the service to sleep after about **15 minutes of
+> inactivity**. The next visit has to wake it up, which usually takes **up to a minute**. During that cold start you
+> may see a **502 error** when logging in.
+>
+> **How to fix it:**
+>
+> 1. Open the backend health check: https://bep-api.onrender.com/health
+> 2. Wait until it shows `{"status": "ok"}`.
+> 3. Go back to the website and log in again.
+>
+> The worker runs inside the same backend service, so it can take a little longer for both to be ready after waking
+> up. This is a limit of Render's free tier, not a bug in the application. A paid Render plan would remove the
+> sleep-related cold starts, and is what I would recommend for a production deployment.
 
 **Video walkthrough (Loom):** https://www.loom.com/share/9a1d51cb8e4e41a08729343b01b293ea ·
 **Slides:** [ppt/Business Evidence Platform – Walkthrough.pptx](ppt/Business%20Evidence%20Platform%20%E2%80%93%20Walkthrough.pptx)
