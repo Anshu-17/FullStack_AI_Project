@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     environment: str = "development"  # development | test | production
     log_level: str = "INFO"
     log_json: bool = True  # JSON logs (False = pretty console logs for local dev)
-    cors_origins: str = "http://localhost:5173"  # comma-separated list
+    cors_origins: str = "http://localhost:8501"  # comma-separated list (Streamlit's port)
 
     # --- Database ---
     database_url: str = "postgresql+psycopg://postgres:devpass@localhost:5432/bep"
@@ -37,12 +37,18 @@ class Settings(BaseSettings):
     prompt_version: str = "p1"
 
     # --- Crawl limits (section 4.3) ---
-    crawl_max_pages: int = 15
-    crawl_max_depth: int = 2
-    crawl_timeout_seconds: float = 10.0
-    crawl_max_total_bytes: int = 5_000_000
-    crawl_per_host_concurrency: int = 2
-    crawl_job_deadline_seconds: int = 120
+    crawl_max_pages: int = 8                # pages per website (homepage + the most relevant links)
+    crawl_max_depth: int = 2                # homepage = depth 0
+    crawl_timeout_seconds: float = 10.0     # per network operation (connect / read)
+    crawl_max_total_bytes: int = 5_000_000  # all pages of one website together
+    crawl_max_page_bytes: int = 1_500_000   # one page; bigger -> outcome "too_large"
+    crawl_max_redirects: int = 5            # every hop is re-checked by the SSRF guard
+    crawl_per_host_concurrency: int = 2     # upper bound; the crawler itself fetches 1 page at a time per site
+    crawl_job_deadline_seconds: int = 120   # wall-clock budget for crawling one website
+    crawl_user_agent: str = "BusinessEvidenceBot/0.1 (research prototype)"
+    # Comma-separated hostnames allowed to resolve to private IPs (local test fixtures ONLY).
+    # Ignored when ENVIRONMENT=production.
+    crawl_allowed_private_hosts: str = ""
 
     # --- Worker (section 4.5) ---
     worker_concurrency: int = 4

@@ -28,6 +28,53 @@ def migrated_db():
     yield
 
 
+PUBLIC_TEST_IP = "93.184.216.34"  # a public address; nothing is ever really contacted
+
+
+@pytest.fixture()
+def fake_dns(monkeypatch):
+    """Replace real DNS. Unknown names resolve to a public IP; tests add records to the returned dict.
+
+    records["host"] = ["10.0.0.5"]  -> host resolves to that address
+    records["host"] = None          -> DNS failure for host
+    """
+    from app.crawler import safety
+
+    records: dict[str, list[str] | None] = {}
+
+    def resolve(host):
+        if host not in records:
+            return [PUBLIC_TEST_IP]
+        if records[host] is None:
+            raise safety.DNSResolutionError(f"could not resolve {host}")
+        return records[host]
+
+    monkeypatch.setattr(safety, "resolve_host", resolve)
+    return records
+
+
+@pytest.fixture()
+def no_sleep(monkeypatch):
+    """Retries don't really wait in tests. Returns the list of requested waits (seconds)."""
+    from app.crawler import fetch
+
+    waits: list[float] = []
+    monkeypatch.setattr(fetch, "sleep", waits.append)
+    return waits
+
+
+@pytest.fixture()
+def crawler_settings(monkeypatch):
+    """Lets a test change a crawl setting just for itself: crawler_settings(crawl_max_pages=3)."""
+    from app.config import settings
+
+    def change(**values):
+        for name, value in values.items():
+            monkeypatch.setattr(settings, name, value)
+
+    return change
+
+
 @pytest.fixture()
 def db():
     """A session whose changes are rolled back after the test."""
