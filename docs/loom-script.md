@@ -1,99 +1,95 @@
-# Loom recording script (20-25 minutes)
+# Loom recording script (20-30 minutes, brief section 11 agenda)
 
-Before recording: wake the deployed services (open the UI and `/health` ~2 minutes before), log in once as reviewer.
-For the local demos, open 4 terminals in the repo (Windows PowerShell shown; macOS/Linux: `source .venv/bin/activate`
-and `export VAR=value`). Have `docs/evidence/` open in a browser tab.
+The brief requires real activity (not slides or pre-recorded output), reproducible with the submitted code, and
+scenarios A-E demonstrated. Never show passwords, `.env` or API keys on screen.
 
-## 0:00-2:00 - Problem and what it does
+**Before recording:** wake the deployed services (open the UI and `/health` ~2 minutes before). Locally, open 4
+PowerShell terminals in the repo root:
 
-- The problem: a list of agricultural companies; which business lines does each one have, and can we prove it?
-- Show the live UI **[UI URL]**: dashboard (metrics), Companies list (7 answers per company, "Test data" badge),
-  one company detail: answer + verbatim quote + source link + model/prompt/policy version.
+| Terminal | Command |
+|---|---|
+| 1 - API | `cd backend; .venv\Scripts\activate; uvicorn app.main:app --port 8000` |
+| 2 - UI | `cd frontend; .venv\Scripts\activate; streamlit run app.py` |
+| 3 - fixture sites (for D) | `backend\.venv\Scripts\python fixtures\server.py` |
+| 4 - worker | `cd backend; .venv\Scripts\activate; $env:JOB_LEASE_SECONDS=30; python -m app.worker.main` |
 
-## 2:00-5:00 - Live end-to-end on the deployed app
+## 00:00-03:00 - Problem, assumptions, priorities, planned architecture
 
-1. Log in as reviewer -> **Add companies** -> one website (e.g. `Agtegra Cooperative`, `https://www.agtegra.com`).
-2. Start research -> **Runs**: progress refreshes every 3 s, from the server.
-3. When done: company detail -> Grain / Energy evidence; open a source link.
-4. Correct one answer with a reason -> provenance "Human"; show the history table.
-5. **Export** CSV -> open it (human answer shows `source = human`).
-6. Log in as viewer -> same data, no edit buttons (backend returns 403 anyway).
+- The problem: which of 7 business lines does each company operate, and can every answer be proven from its website?
+- Assumptions: public websites only; Not Found = "not found within the crawl scope"; Accounting = Yes by policy rule.
+- Priorities: a reliable vertical slice (evidence integrity, resilience) over breadth; honest gaps
+  (`docs/status-matrix.md`).
+- Architecture in one sentence: Streamlit -> FastAPI -> Postgres <- worker (crawler + AI), Postgres is the queue.
 
-## 5:00-8:00 - Architecture (docs/design.md)
+## 03:00-07:00 - Codebase, schema, pipeline, interaction diagram (`docs/design.md`)
 
-- System diagram: UI -> API -> Postgres <- worker -> crawler / AI. UI never touches the DB; API never crawls.
-- Sequence diagram: upload -> run -> claim -> crawl -> select -> classify -> validate -> fenced save.
-- ERD: the unique constraints that make duplicates impossible.
-- Job states: retry, lease recovery, cancel.
+- Folders: `backend/app/{api,services,crawler,classifier,worker,db}`, `frontend/`, `fixtures/`, `docs/evidence/`.
+- Component + sequence diagrams; ERD and the unique constraints that make duplicates impossible.
+- Pipeline: crawl -> select passages -> prompt (untrusted tags) -> validate (verbatim quotes) -> Accounting rule ->
+  fenced save. Job state machine: retries, lease recovery, cancel.
 
-## 8:00-16:00 - Scenario demos (local)
+## 07:00-15:00 - Live demo (deployed app **[UI URL]**)
 
-Terminal 1 - API: `cd backend; .venv\Scripts\activate; uvicorn app.main:app --port 8000`
-Terminal 2 - UI: `cd frontend; .venv\Scripts\activate; streamlit run app.py`
-Terminal 3 - fixture server (for D): `backend\.venv\Scripts\python fixtures\server.py`
+1. Log in as reviewer. **Upload** `sample-data/real_companies.csv` (or add one URL) -> accepted / existing /
+   duplicate / invalid rows with reasons.
+2. **Real analysis:** start research for 1-2 companies -> Runs page, per-item statuses and progress from the server.
+3. **Evidence verification:** company detail -> a Yes answer -> verbatim quote, source URL (open it and find the
+   sentence on the live site), model / prompt / policy version, "Website" vs "Rule" (Accounting) badges.
+4. **Review / override (scenario E):** correct Grain to "Possible" with a reason -> provenance "Human", history table.
+5. **Repeat scan:** rescan the company -> final answer stays "Possible" (Human) with
+   "⚠ Conflicts with the latest automated scan".
+6. **Search and export:** filter Companies by category / status; Export CSV -> `grain_source = human`,
+   `grain_conflict = yes`; corrections audit export.
+7. **Duplicates (scenario C):** add `https://WWW.Agtegra.com/about` again -> "already existed"; click Start twice ->
+   same run (Idempotency-Key). Evidence: `scenario_C_duplicates.md`.
 
-**A - worker crash (2.5 min)**
-```powershell
-cd backend; .venv\Scripts\activate
-$env:JOB_LEASE_SECONDS=30; python -m app.worker.main          # terminal 4
-```
-Start a rescan of a real company in the UI; when the job is `running`, kill the worker hard:
+## 15:00-21:00 - Tests, negative cases, logs, retries, restart recovery, auth, URL safety (local)
+
+**A - worker crash mid-batch (2 min)** - start a rescan; when the job is `running`, kill the worker (any terminal):
 ```powershell
 Get-CimInstance Win32_Process | ? { $_.CommandLine -match 'app\.worker\.main' } | % { taskkill /F /T /PID $_.ProcessId }
 ```
-Show the job still `running` with its lease (Runs -> job details). Restart the worker (same command). After ~30 s:
-attempt 1 `abandoned`, attempt 2 `succeeded`, exactly 7 answers. Point to `docs/evidence/scenario_A_worker_crash.md`.
+Show the job still `running` with its lease; restart terminal 4's command. After ~30 s: attempt 1 `abandoned`,
+attempt 2 `succeeded`, exactly 7 answers. Show the JSON log lines (`job.lease_recovered`). Evidence:
+`scenario_A_worker_crash.md`.
 
-**B - AI failure and fallback (1.5 min)**
+**B - AI provider timeout / rate limit / malformed output (1.5 min)**
 ```powershell
 $env:GOOGLE_MODEL='does-not-exist'; python -m app.classifier.cli https://www.agtegra.com --name "Agtegra Cooperative" --quiet
+pytest tests/test_classify_pipeline.py tests/test_classifier.py -k "timeout or rate_limit or missing_category or cut_off or daily_quota or all_providers_fail or error_classification"
 ```
-Show the AI calls: Google `AI_ERROR` once (not retried), Groq `ok`. Mention the daily-quota breaker (`skipped_quota`).
-Evidence: `hour2_classifier.md`, `real_site_pilot.md`.
+Google `AI_ERROR` once (not retried), Groq `ok`; tests: timeouts / 429 retried with a ceiling, invalid output never
+saved, all providers down -> no classifications, job `failed` `AI_UNAVAILABLE`. Evidence: `scenario_B_ai_failures.md`.
 
-**C - duplicates (1.5 min)** - in the UI: add `agtegra.com` again -> "already existed"; upload a CSV with the same
-site spelled 3 ways -> 1 accepted, duplicates name the row. Start research twice quickly (double-click) -> same run.
-Evidence: `scenario_C_duplicates.md`.
-
-**D - SSRF and prompt injection (1.5 min)** - start the worker with the fixture settings (terminal 4, after stopping
-the previous worker):
+**D - malicious site: redirect to private IP + prompt injection (1.5 min)** - stop the worker, restart it with
+TEST-ONLY fixture settings:
 ```powershell
 $env:CRAWL_FIXTURE_SERVER='127.0.0.1:8765'; $env:CRAWL_ALLOWED_PRIVATE_HOSTS='*.fixture.test'; python -m app.worker.main
 ```
-Add `http://redirect-to-private.fixture.test/` and `http://prompt-injection.fixture.test/`, run both: the first fails
-`BLOCKED_UNSAFE` (redirect to 10.0.0.5, never fetched); the second has only Agronomy = yes, the hidden
-"IGNORE ALL PREVIOUS INSTRUCTIONS" is just page text. Evidence: `scenario_D_ssrf_and_injection.md`.
+Add and run `http://redirect-to-private.fixture.test/` -> `BLOCKED_UNSAFE` (10.0.0.5 never fetched) and
+`http://prompt-injection.fixture.test/` -> only Agronomy = yes; the hidden instruction is just page text. Evidence:
+`scenario_D_ssrf_and_injection.md`.
 
-**E - human correction vs new scan (1 min)** - correct Grain on a company to "Possible", rescan, show the final
-answer still "Possible" (Human) with "⚠ Conflicts with the latest automated scan". Evidence: `scenario_E_override_conflict.md`.
+**Tests and auth (1 min)** - `cd backend; pytest -q` (250 passed); viewer login -> no edit buttons, API answers 403.
 
-Mention F-J with their evidence files (DB write failure, concurrent edits, ambiguous vs unavailable, cancel,
-migration) - `docs/evidence/README.md`.
+**F-J (30 s)** - name each and its evidence file: F transient DB failure during a write, G concurrent reviewer
+edits, H weak / ambiguous / unavailable evidence, I cancellation during a run, J migration with rollback
+(`docs/evidence/README.md`).
 
-## 16:00-20:00 - Code tour (key files)
+## 21:00-25:00 - AI tool usage, important generated code, mistakes found, verification (`docs/ai-usage.md`)
 
-| File | What to show |
-|---|---|
-| `backend/app/crawler/safety.py` | every resolved IP must be public; re-checked per redirect hop |
-| `backend/app/crawler/crawl.py` | priority queue, limits, cross-domain redirect, duplicate-text pages |
-| `backend/app/classifier/select.py`, `prompts.py` | passage budget; untrusted tags |
-| `backend/app/classifier/validate.py` | verbatim-quote check, relevance, 25-char rule |
-| `backend/app/classifier/pipeline.py` | retries, fallback, quota breaker, every call in `ai_usage` |
-| `backend/app/worker/leases.py` | `FOR UPDATE SKIP LOCKED`, heartbeat, recovery |
-| `backend/app/worker/process.py` | fenced finalize (`lease_owner == me`), backoff |
-| `backend/app/services/overrides.py` | optimistic locking + unique rule |
-| `backend/app/db/models.py` | the constraints table in design.md |
-| `frontend/api_client.py` | the only place the UI calls the backend |
+- Tools: Claude (chat) for planning / briefs, Claude Code for implementation and tests; Gemini / Groq only inside the
+  product. **[Say in your own words what you decided and checked.]**
+- Walk through key generated code: `crawler/safety.py`, `classifier/validate.py`, `worker/leases.py`,
+  `worker/process.py` (fenced finalize).
+- Mistakes found: extract line-break bug (caught by a test), stitched / invented quotes (caught by validation), the
+  300-character schema limit rejecting whole answers, p2 -> p3 tuned on the same fixtures (caveat), LangGraph dropped.
 
-## 20:00-22:30 - Evidence and numbers (docs/submission-summary.md)
+## 25:00-30:00 - Performance / cost, unfinished features, trade-offs, hardening
 
-Pilot: 12 of 15 classified, 3 sites refuse crawlers; audit 78 quotes (66 OK / 9 weak / 3 questionable, 2 false
-negatives). Fixture evaluation 54/54 - say clearly it is fit to our own 9 synthetic sites, no held-out set.
-Intake 1,000 rows ~1.4 s. Synthetic 100 jobs ~70/min, 0 duplicates. 250 + 12 tests.
-
-## 22:30-25:00 - Trade-offs and next steps
-
-- Postgres as the queue; no headless browser; strict verbatim evidence (design.md section 9).
-- Free-tier limits: Gemini 20 requests/day/model, sleeping free services.
-- Next: labelled real-world test set; separate always-on worker; shared rate limiter for several workers; JS
-  rendering lane; IP pinning; CRM sync; multi-tenancy (limitations.md).
+- Numbers: 1,000-row intake ~1.4 s; 100 synthetic jobs ~70/min (fake AI, local fixtures); pilot 12 of 15 classified;
+  audit 66 / 9 / 3 of 78 quotes; fixture score 54/54 tuned on the same set. Cost: tokens recorded, price unknown
+  (free tier) - not estimated.
+- Unfinished: JS-rendered sites, multi-tenancy, CRM sync, multi-worker deployment, IP pinning, held-out set.
+- Trade-offs: Postgres as queue; no headless browser; strict verbatim evidence.
+- Hardening: separate worker service, paid AI tier + shared rate limiter, retention job, labelled real-world set.

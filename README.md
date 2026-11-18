@@ -49,6 +49,24 @@ pip install -r requirements.txt -r requirements-dev.txt
 streamlit run app.py                                     # http://localhost:8501 (API_URL if not localhost:8000)
 ```
 
+### Environment variables (`backend/.env`, template: `backend/.env.example`)
+
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection (`postgresql+psycopg://...`) |
+| `JWT_SECRET` | token signing key (production: random, >= 32 chars) |
+| `ENVIRONMENT`, `LOG_LEVEL`, `LOG_JSON`, `CORS_ORIGINS` | runtime mode, logging, allowed UI origin |
+| `AI_PROVIDER`, `AI_FALLBACK_PROVIDERS`, `AI_TIMEOUT_SECONDS` | primary / fallback AI provider (`google`, `groq`, ...) |
+| `GOOGLE_API_KEY`, `GOOGLE_MODEL`, `GROQ_API_KEY`, `GROQ_MODEL` | provider keys and models (others: `ANTHROPIC_*`, `XAI_*`, `OPENAI_*`, optional) |
+| `AI_PRICE_INPUT_PER_MTOK`, `AI_PRICE_OUTPUT_PER_MTOK` | optional prices for cost estimates (blank = cost "unknown") |
+| `SEED_REVIEWER_EMAIL` / `_PASSWORD`, `SEED_VIEWER_EMAIL` / `_PASSWORD` | demo accounts created by the seed |
+| `CRAWL_ALLOWED_PRIVATE_HOSTS` | TEST ONLY (fixtures); ignored in production |
+| `WORKER_CONCURRENCY`, `JOB_LEASE_SECONDS` | worker threads (default 2), lease length (default 120 s) |
+| `API_URL` (frontend) | where the UI finds the API (default `http://localhost:8000`) |
+
+Sample input: `sample-data/real_companies.csv` (15 real companies), `sample-data/bulk_1000.csv` (1,000 generated
+rows with duplicates and invalid entries), `sample-data/labelled_fixtures.csv` (expected answers for the fixtures).
+
 One website end to end without the API / worker: `python -m app.classifier.cli https://www.example.com --name "Example" --quiet`
 (in `backend/`).
 
@@ -100,6 +118,7 @@ ignored in production). `AI_PROVIDER=fake` gives a deterministic keyword "AI" fo
 | [crm-mapping.md](docs/crm-mapping.md) | proposed CRM field mapping (not built) |
 | [deployment.md](docs/deployment.md) | Supabase + Render step by step |
 | [loom-script.md](docs/loom-script.md) | video walkthrough outline with demo commands |
+| [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) | license of every pinned dependency (lockfiles: `*/requirements.lock.txt`) |
 
 ## Database migrations
 

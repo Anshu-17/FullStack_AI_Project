@@ -54,6 +54,30 @@
    agronomy, Star Oilco gas station) by reading the crawled pages, and a TLS failure mislabelled as
    `robots_disallowed`; these are reported as findings rather than hidden.
 
+## Meaningful prompts and workflows
+
+- **Development workflow:** for each stage a written brief (goal, exact files, acceptance checks, "STOP and report if
+  ..." rules, commit rules) was given to Claude Code; it implemented, ran tests and live checks, and reported; the
+  report was read before the next brief **[CANDIDATE TO CONFIRM]**.
+- **Product prompt:** `backend/app/classifier/prompts.py` (version p3) - system rules per category taken from the
+  brief's definitions and special rules, website passages inside `<untrusted_website_content>`, JSON output with
+  `passage_id` per quote. Changes are versioned (`prompt_version` on every classification).
+
+## Limitations: AI-generated mistakes, unsupported assumptions, unresolved defects
+
+- **Mistakes found** (examples 1-4, 6 above): line-break extraction bug, stitched / invented quotes, the schema
+  limit, the prompt miss on outdated evidence, the missing `.env.example`.
+- **Unsupported assumptions:** the fixture score (54/54) does not show real-world accuracy (prompt tuned on the same
+  set); the keyword relevance check assumes evidence mentions category words; the Docker / Render setup was written
+  without running Docker locally.
+- **Unresolved defects:** TLS failures reported as `robots_disallowed`; no DNS-rebinding IP pinning; Groq fallback
+  false negatives; in-flight AI calls of a killed worker not recorded. Full list: [limitations.md](limitations.md).
+
+## Technical ownership
+
+**[CANDIDATE TO CONFIRM]** The author must be able to explain every code path without an AI tool (brief section 9);
+list here the parts you reviewed line by line (e.g. SSRF check, lease / fencing, validation, override locking).
+
 ## What the author did personally
 
 **[CANDIDATE TO CONFIRM - write this section yourself]** e.g. which requirements you analysed, which design

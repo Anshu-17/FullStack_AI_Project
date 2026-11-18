@@ -190,6 +190,16 @@ flowchart LR
 
 ## 7. Security
 
+**Trust boundaries** (data crossing each one is checked):
+
+| Boundary | Untrusted side | Check at the boundary |
+|---|---|---|
+| browser -> API | user input, uploaded CSV, tokens | JWT + role on every request, pydantic validation, CSV size / row limits, rate limits |
+| worker -> internet | website URLs, redirects, response bodies | SSRF check per hop, robots.txt, size / time budgets, no scripts executed |
+| page text -> AI prompt | website content (may contain instructions) | passages inside `<untrusted_website_content>`, system prompt says it is data |
+| AI answer -> database | model output | schema parse, verbatim-quote check against stored page, relevance and length rules, Accounting rule, human override wins |
+| config -> process | environment / secrets | production refuses weak `JWT_SECRET` and test-only hooks; secrets never logged |
+
 | Threat | Defence |
 |---|---|
 | SSRF (a "website" pointing at 127.0.0.1, 10.x, 169.254.169.254, ...) | only http/https, no `user:pass@`, every resolved IP must be public, redirects followed by hand and re-checked per hop; unsafe start URL = permanent `BLOCKED_UNSAFE` |

@@ -1,52 +1,47 @@
 # Submission summary - Business Evidence Platform
 
-**What it does.** Upload a list of companies (CSV or one by one); a background worker crawls each company's public
-website safely, an AI classifies seven business lines (Accounting, Agronomy, Grain, Energy, Feed, Gas Station,
-Retail Store) and every "yes" must be backed by a **verbatim quote** from a crawled page. Reviewers see the evidence,
-correct answers (the human answer wins, with full history), and export CSV / JSON.
+**What it does.** Upload companies (CSV or one URL); a background worker crawls each public website safely, an AI
+classifies seven business lines (Accounting, Agronomy, Grain, Energy, Feed, Gas Station, Retail Store) and every
+website-derived Yes / Possible is backed by a **verbatim quote the system verifies against the crawled page**.
+Reviewers correct answers (the human answer wins, with full history and conflict flags) and export CSV / JSON.
 
-**Live:** UI **[UI URL - fill in after deployment]** · API **[API URL]** · API docs **[API URL]/docs**
-**Log in:** `reviewer@demo.local` (can change data) or `viewer@demo.local` (read / export) - passwords are shared
-privately. **[Note: free hosting sleeps when idle - the first page load can take ~1 minute.]**
-**Code:** https://github.com/Anshu-17/FullStack_AI_Project
+**Stack.** Python 3.13 · FastAPI · PostgreSQL (Supabase) · SQLAlchemy + Alembic · Postgres-based job queue with
+leases · httpx + BeautifulSoup crawler · Gemini (primary) + Groq (fallback) · Streamlit · Docker on Render.
 
-**Stack.** Python 3.13 · FastAPI · PostgreSQL (Supabase) · SQLAlchemy + Alembic · background worker with
-Postgres-based leases · httpx + BeautifulSoup crawler · Gemini (primary) + Groq (fallback) via LangChain ·
-Streamlit UI · Docker on Render.
+## Status matrix (full version: [status-matrix.md](status-matrix.md))
 
-## Built vs not built
+| Built and proven | Built but unverified | Partial | Not built |
+|---|---|---|---|
+| CSV / URL intake with row-level results (1,000 rows ~1.4 s); dedup by domain; safe crawler (SSRF, robots, budgets); evidence-validated classification with Accounting rule; Possible / Not Found semantics; provider retries + fallback; worker leases, crash recovery, cancel, manual retry; idempotent runs; corrections with optimistic locking and audit trail; human-wins answers with conflict flags; search, filters, export; login + roles; rate limits; structured logs, health / readiness, metrics; reversible migrations; **scenarios A-E demonstrated, F-J tested / demonstrated**; 15-site real pilot + manual audit; 100-job synthetic workload | deployment (Render + Supabase files ready, never built or run); responsive layout and keyboard use (Streamlit defaults, no audit) | evidence relevance (audit: 66 OK / 9 weak / 3 questionable of 78 quotes); contradictory sources (prompt rule only); AI cost (tokens recorded, cost unknown on free tiers); DNS-rebinding defence (no IP pinning); multi-worker execution (one process run); AI usage statement (draft); repository licence for own code | live URLs and Loom **[until done]**; JavaScript-rendered sites; multi-tenancy; real CRM integration (mapping proposed only); user-management screens |
 
-| Built and demonstrated | Partial | Not built |
-|---|---|---|
-| CSV intake with row-level results; dedup by domain; safe crawler (SSRF, robots, limits); evidence-validated classification; provider fallback; worker leases / retries / crash recovery / cancel; idempotent runs; corrections with optimistic locking; human-wins answers with conflict flags; export; login + roles; rate limits; metrics; reversible migrations; scenarios A-J | real-world accuracy (15-site pilot, manual audit, no held-out set); distributed workers (designed, not run); deployment (files ready, not deployed **[update after deploying]**); cost tracking (cost unknown on free tiers); DNS-rebinding protection | JavaScript-rendered sites; multi-tenancy; CRM integration; user management screens |
+## Key numbers (all from real runs - [evidence/README.md](evidence/README.md))
 
-Full matrix: [status-matrix.md](status-matrix.md).
+- **Real-site pilot:** the 12 suggested + 3 added companies; 12 classified, 3 failed (2x HTTP 403, 1 TLS chain - sites
+  not bypassed). Audit of 78 quotes: 66 OK, 9 weak, 3 questionable; 2 clear false negatives (Groq fallback).
+- **Fixture evaluation (9 synthetic sites, real Gemini):** 54/54 with prompt p3, **tuned on the same set - fit, not
+  real-world accuracy; no held-out set.**
+- **Synthetic workload (fixtures + fake AI, 2 threads):** 100 jobs ~70 jobs/min, p50 0.74 s per job, 0 duplicates.
+- **Crash recovery:** worker hard-killed mid-job -> lease expired, job finished once, exactly 7 answers.
+- **Tests:** 250 backend (88 % line coverage) + 12 frontend, all passing.
 
-## Key numbers (all from real runs - see `docs/evidence/`)
+## Top risks
 
-- **Real-site pilot, 15 companies:** 12 classified (3 completed, 9 for review), 3 failed because the sites refuse
-  crawlers (2x HTTP 403, 1 TLS chain). Manual audit of 78 quotes: 66 OK, 9 weak, 3 questionable; 2 clear false
-  negatives (Groq fallback).
-- **Fixture evaluation (9 synthetic sites, real Gemini):** 54/54 with prompt p3 - tuned on the same set, so a fit to
-  our fixtures, **not** real-world accuracy.
-- **Intake:** 1,000-row CSV in one request in ~1.4 s (900 accepted / 50 duplicate / 50 invalid, each with a reason).
-- **Synthetic workload:** 100 jobs (local fixtures + fake AI) at ~70 jobs/min on 2 threads, p50 0.74 s per job,
-  exactly 7 answers per successful job, 0 duplicates.
-- **Crash recovery:** worker hard-killed mid-job -> lease expired, job finished once by another worker, exactly 7
-  answers (scenario A).
-- **Tests:** 250 backend + 12 frontend, all passing; `ruff` and `alembic check` clean.
+1. **Free-tier AI quotas** (Gemini 20 requests/model/day) stall real batches - seen in the pilot.
+2. **Free hosting**: API + worker share one sleeping container; jobs only progress while it is awake; first build
+   happens on Render.
+3. **Accuracy on unseen sites is unmeasured** (no held-out labelled set); the Groq fallback is weaker.
 
-## Where to look
+## Next three priorities
 
-| What | File |
-|---|---|
-| Architecture, diagrams, decisions, scale path | [design.md](design.md) |
-| API reference | [api.md](api.md), live `/docs` |
-| Evidence for every scenario and number | [evidence/README.md](evidence/README.md) |
-| Chronological decisions | [decision-log.md](decision-log.md) |
-| How AI was used | [ai-usage.md](ai-usage.md) |
-| Limitations and next steps | [limitations.md](limitations.md) |
-| Privacy | [privacy.md](privacy.md) |
-| CRM mapping (proposal) | [crm-mapping.md](crm-mapping.md) |
-| Deployment guide | [deployment.md](deployment.md) |
-| Video **[LOOM URL]** | outline: [loom-script.md](loom-script.md) |
+1. Label 30-50 real companies by hand as a held-out set and measure precision / recall on it.
+2. Separate always-on worker service + paid / budgeted AI tier with a shared per-provider rate limiter.
+3. Crawl hardening: IP pinning (DNS rebinding), smarter page selection, optional JavaScript-rendering lane.
+
+## Submission message (brief section 15)
+
+1. Frontend: **[UI URL]**  2. Backend / API: **[API URL]** (docs: **[API URL]/docs**)
+3. Repository: https://github.com/Anshu-17/FullStack_AI_Project  4. Loom: **[LOOM URL]**
+5. Documentation: `README.md` + `docs/`  6. Test / run evidence: `docs/evidence/README.md`
+7. Status matrix: this page + `docs/status-matrix.md`
+Credentials (`reviewer@demo.local`, `viewer@demo.local`): sent separately **[via the evaluator-approved method]**,
+never in the repository or the video. Free hosting sleeps when idle: the first load can take ~1 minute.
