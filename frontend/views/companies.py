@@ -1,4 +1,6 @@
-"""Companies: search and filter on the FINAL answers, open a company, export."""
+"""Companies: search and filter on the FINAL answers, open a company, start research, export."""
+import uuid
+
 import streamlit as st
 
 import api_client
@@ -55,6 +57,35 @@ else:
     if st.button("Open details", type="primary", icon=":material/open_in_new:"):
         st.session_state["company_id"] = choice
         st.switch_page("views/company_detail.py")
+
+
+def never_researched_ids() -> list[int]:
+    """Ids of companies (matching the search / test-data filters) that have never had a job, from ALL pages."""
+    ids, page_no = [], 1
+    while True:
+        batch = api_client.get("/api/companies", page=page_no, page_size=200, search=search,
+                               include_test=filters["include_test"])
+        ids += [c["id"] for c in batch["items"] if c["latest_job"] is None]
+        if page_no * 200 >= batch["total"]:
+            return ids
+        page_no += 1
+
+
+if api_client.is_reviewer() and data["total"]:
+    st.divider()
+    st.subheader("Research")
+    if st.button("Start research for all not-scanned companies", icon=":material/play_arrow:", key="start_all",
+                 help="Every company matching the search / test-data filters that has never been researched"):
+        ids = ui.load("companies", never_researched_ids)  # on an API error: shows it and stops the page
+        if not ids:
+            st.info("Every matching company has already been researched (or is in progress).")
+        else:
+            # A fresh key for this click's batch; the backend still skips companies already in progress
+            run = ui.start_research(ids, f"batch-{uuid.uuid4()}")
+            if run:
+                st.session_state["batch_run"] = run
+    if st.session_state.get("batch_run"):
+        ui.run_started(st.session_state["batch_run"], "batch")
 
 st.divider()
 st.subheader("Export")

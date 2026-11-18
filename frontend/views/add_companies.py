@@ -33,11 +33,27 @@ if add:
     except ApiError as exc:
         ui.show_error(exc)
     else:
-        company = result["company"]
-        if result["created"]:
-            st.success(f"Created **{company['name']}** ({company['canonical_domain']}).")
-        else:
-            st.info(f"**{company['canonical_domain']}** already existed as **{company['name']}** - nothing duplicated.")
+        # Remembered across reruns (the form clears itself), so the "Start research" button keeps working
+        st.session_state["single_added"] = result
+        st.session_state.pop("single_run", None)
+        # One Idempotency-Key per added company, created once: repeated clicks reuse the same run
+        keys = st.session_state.setdefault("research_keys", {})
+        keys.setdefault(result["company"]["id"], f"company-{result['company']['id']}-{uuid.uuid4()}")
+
+added = st.session_state.get("single_added")
+if added:
+    company = added["company"]
+    if added["created"]:
+        st.success(f"Created **{company['name']}** ({company['canonical_domain']}).")
+    else:
+        st.info(f"**{company['canonical_domain']}** already existed as **{company['name']}** - nothing duplicated.")
+    if st.button("Start research for this company", type="primary", icon=":material/play_arrow:",
+                 key="start_single"):
+        run = ui.start_research([company["id"]], st.session_state["research_keys"][company["id"]])
+        if run:
+            st.session_state["single_run"] = run
+    if st.session_state.get("single_run"):
+        ui.run_started(st.session_state["single_run"], "single")
 
 st.divider()
 

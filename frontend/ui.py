@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 
 import streamlit as st
 
+import api_client
 from api_client import ApiError
 
 # Order used everywhere in the UI
@@ -65,6 +66,38 @@ def load(what: str, fn, *args, **kwargs):
     except ApiError as exc:
         show_error(exc)
         st.stop()
+
+
+def start_research(company_ids: list[int], idempotency_key: str) -> dict | None:
+    """POST /api/runs for these companies. Returns the new (or earlier, same-key) run, or None after
+    showing why nothing started. The SAME key must be reused for repeated clicks, so a double click
+    can never create two runs."""
+    try:
+        with st.spinner("Starting research..."):
+            return api_client.post("/api/runs", json={"company_ids": company_ids},
+                                   headers={"Idempotency-Key": idempotency_key})
+    except ApiError as exc:
+        busy = [s for s in exc.details.get("skipped") or [] if s.get("reason") == "already_in_progress"]
+        if busy:  # 409 NOTHING_TO_RUN because a job is already queued / running for them
+            st.warning(f"{exc.message} Research is already in progress "
+                       f"({len(busy)} {'company' if len(busy) == 1 else 'companies'}) - see the Runs page.",
+                       icon=":material/hourglass_top:")
+        else:
+            show_error(exc)
+        return None
+
+
+def run_started(run: dict, key: str) -> None:
+    """Confirmation for a started run + a button that opens it on the Runs page."""
+    again = "" if run.get("created", True) else " (started earlier - same run)"
+    st.success(f"Run **#{run['run_id']}** started for {run['total_items']} "
+               f"{'company' if run['total_items'] == 1 else 'companies'}{again}.")
+    busy = [s for s in run.get("skipped") or [] if s["reason"] == "already_in_progress"]
+    if busy:
+        st.warning(f"{len(busy)} skipped: already in progress in another run.")
+    if st.button(f"Open run #{run['run_id']}", icon=":material/open_in_new:", key=f"open_run_{key}"):
+        st.session_state["run_id"] = run["run_id"]
+        st.switch_page("views/runs.py")
 
 
 def legend() -> None:

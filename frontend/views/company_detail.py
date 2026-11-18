@@ -26,12 +26,17 @@ if company.get("is_test_data"):
     st.markdown(f"{ui.test_data_badge(company)} This is test data ({company['source']}), not a real company.")
 st.markdown(f"[{company['website_url']}]({company['website_url']}) · last scanned **{ui.when(last_scanned)}** · "
             f"latest job: **{latest_job['status'] if latest_job else 'never scanned'}**")
-if api_client.is_reviewer() and st.button("Rescan this company", icon=":material/refresh:"):
-    try:
-        run = api_client.post(f"/api/companies/{company_id}/rescan", headers={"Idempotency-Key": str(uuid.uuid4())})
-        st.success(f"Rescan started: run #{run['run_id']}.")
-    except ApiError as exc:
-        ui.show_error(exc)
+if api_client.is_reviewer():
+    # "Start research" for a company never scanned, "Rescan" otherwise. One Idempotency-Key per click.
+    label, icon = ("Rescan this company", ":material/refresh:") if scans else \
+        ("Start research", ":material/play_arrow:")
+    if st.button(label, type="primary", icon=icon, key="rescan"):
+        run = ui.start_research([company_id], f"rescan-{company_id}-{uuid.uuid4()}")
+        if run:
+            st.session_state["detail_run"] = {**run, "company_id": company_id}
+    started = st.session_state.get("detail_run")
+    if started and started["company_id"] == company_id:
+        ui.run_started(started, "detail")
 
 # ------------------------------------------------------------------ the 7 answers
 NEW_STATUS = {"Yes": "yes", "Possible": "possible", "Not found": "not_found", "Remove correction": None}
