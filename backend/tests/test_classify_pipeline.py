@@ -245,6 +245,88 @@ def test_rate_limit_is_retried_then_succeeds(db, job, monkeypatch):
     assert [u.outcome for u in usage_rows(db, job)] == ["rate_limited", "ok"]
 
 
+class DailyQuotaError(Exception):
+    """What Gemini's free tier answers when the DAY's quota is used up."""
+    status_code = 429
+
+    def __init__(self):
+        super().__init__("429 RESOURCE_EXHAUSTED. You exceeded your current quota. "
+                         "quotaId: GenerateRequestsPerDayPerProjectPerModel-FreeTier, limit: 20")
+
+
+@pytest.fixture()
+def no_cooldowns():
+    from app.classifier.providers import reset_quota_cooldowns
+    reset_quota_cooldowns()
+    yield
+    reset_quota_cooldowns()
+
+
+def test_daily_quota_error_cools_the_provider_down_for_later_jobs(db, monkeypatch, no_cooldowns):
+    google = FakeModel(DailyQuotaError())
+    first, second = make_job(db, [HOME_TEXT]), None
+    groq = FakeModel(output(db, first.id))
+    use_models(monkeypatch, google=google, groq=groq)
+
+    assert classify_job(db, first.id).provider == "groq"
+    assert google.calls == 1  # a DAILY quota error is not retried (the day won't end in 10 s)
+    assert [(u.provider, u.outcome, u.error_code) for u in usage_rows(db, first)] == [
+        ("google", "quota_exhausted", "AI_QUOTA_EXHAUSTED"), ("groq", "ok", None)]
+
+    # The next job of this worker skips Google entirely: no call, one "skipped_quota" row, no tokens.
+    second = Job(run_id=first.run_id, company_id=make_company_for(db).id)
+    db.add(second)
+    db.flush()
+    db.add(Page(job_id=second.id, url="https://two.example/", depth=0, outcome="ok", text_content=HOME_TEXT))
+    db.commit()
+    groq.answers = [output(db, second.id)]
+    groq.calls = 0
+    assert classify_job(db, second.id).provider == "groq"
+    assert google.calls == 1  # unchanged: not called again
+    rows = usage_rows(db, second)
+    assert [(u.provider, u.outcome, u.error_code, u.input_tokens) for u in rows] == [
+        ("google", "skipped_quota", "AI_QUOTA_COOLDOWN", None), ("groq", "ok", None, 1000)]
+
+
+def make_company_for(db):
+    company = Company(name="Second Co-op", website_url="https://two.example/", canonical_domain="two.example")
+    db.add(company)
+    db.flush()
+    return company
+
+
+def test_per_minute_rate_limit_does_not_start_a_cooldown(db, job, monkeypatch, no_cooldowns):
+    from app.classifier.providers import quota_cooldown_left
+    use_models(monkeypatch, google=FakeModel(HTTPError(429), output(db, job.id)), groq=FakeModel())
+    assert classify_job(db, job.id).provider == "google"  # backed off and retried the same provider
+    assert quota_cooldown_left("google") == 0
+
+
+def test_cut_off_answer_is_invalid_output_and_retried(db, job, monkeypatch, no_cooldowns):
+    class TruncatedThenOk(FakeModel):
+        def invoke(self, messages):
+            result = super().invoke(messages)
+            if self.calls == 1:  # first answer: cut off by the token limit (even though it parsed)
+                result["raw"] = AIMessage(content="{...", response_metadata={"finish_reason": "length"})
+            return result
+
+    model = TruncatedThenOk(output(db, job.id))
+    use_models(monkeypatch, google=model, groq=FakeModel())
+    assert classify_job(db, job.id).provider == "google"
+    assert [(u.outcome, u.error_code) for u in usage_rows(db, job)] == [
+        ("invalid_output", "AI_INVALID_OUTPUT"), ("ok", None)]
+
+
+def test_length_finish_error_is_classified_as_invalid_output():
+    from app.classifier.providers import describe_error
+
+    class LengthFinishReasonError(Exception):  # same name as the openai SDK's exception
+        pass
+
+    info = describe_error(LengthFinishReasonError("Could not parse response content as the length limit was reached"))
+    assert (info.code, info.retryable) == ("AI_INVALID_OUTPUT", True)
+
+
 def test_all_providers_fail_saves_no_classifications(db, job, monkeypatch):
     use_models(monkeypatch, google=FakeModel(HTTPError(503)), groq=FakeModel(TimeoutError("slow")))
     with pytest.raises(AIUnavailableError):

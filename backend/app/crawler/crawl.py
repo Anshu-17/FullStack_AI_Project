@@ -12,6 +12,7 @@ Stops at whichever limit is hit first: page count, total bytes, deadline.
 Politeness: one request at a time to a site (well under crawl_per_host_concurrency).
 Running several companies in parallel is the worker's job, not the crawler's.
 """
+import hashlib
 import heapq
 import itertools
 import time
@@ -62,6 +63,15 @@ class CrawlResult:
     # Set when the homepage redirected to ANOTHER domain, e.g. "https://fscooperatives.com/insightfs".
     # Only pages under that address are crawled (a shared site may host other companies too).
     redirected_to: str | None = None
+    duplicate_pages: int = 0  # pages whose text equals an earlier page's: kept, but not counted in the budget
+
+
+DUPLICATE_PREFIX = "duplicate_of:"  # error_detail of a page whose text is identical to an earlier page
+
+
+def is_duplicate(page) -> bool:
+    """A page (CrawledPage or Page row) marked as having the same text as an earlier page of the crawl."""
+    return (page.error_detail or "").startswith(DUPLICATE_PREFIX)
 
 
 def link_priority(url: str, link_text: str) -> int:
@@ -95,10 +105,12 @@ def crawl_site(start_url: str, client: httpx.Client | None = None) -> CrawlResul
     order = itertools.count()  # tie-breaker: same priority and depth -> first discovered first
     queue = [(0, 0, next(order), start)]  # (priority, depth, order, url)
     seen = {start}  # every URL ever queued: guarantees no page is fetched twice
+    text_hashes: dict[str, str] = {}  # sha256 of page text -> first URL with that text
 
     try:
         while queue:
-            if len(result.pages) >= settings.crawl_max_pages:
+            # Duplicate-text pages don't use up the page budget (they add no new evidence).
+            if len(result.pages) - result.duplicate_pages >= settings.crawl_max_pages:
                 result.stopped_reason = "page_limit"
                 break
             if result.total_bytes >= settings.crawl_max_total_bytes:
@@ -141,6 +153,17 @@ def crawl_site(start_url: str, client: httpx.Client | None = None) -> CrawlResul
 
             page.title, page.text, links = extract(page.html, page_url)
             page.html = None  # keep only the cleaned text (raw HTML is not stored)
+
+            # Same text as a page we already have (e.g. "/" and "/home")? Keep the row for the record,
+            # but mark it, don't count it, don't send it to the AI, and don't follow its (identical) links.
+            digest = hashlib.sha256(page.text.encode("utf-8")).hexdigest() if page.text else None
+            if digest and digest in text_hashes:
+                page.error_detail = f"{DUPLICATE_PREFIX}{text_hashes[digest]}"
+                result.duplicate_pages += 1
+                log.info("crawl.duplicate_text", url=url, duplicate_of=text_hashes[digest])
+                continue
+            if digest:
+                text_hashes[digest] = url
 
             if depth >= settings.crawl_max_depth:
                 continue  # deep enough: don't queue this page's links

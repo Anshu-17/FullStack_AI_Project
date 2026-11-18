@@ -11,6 +11,8 @@ so every single call is visible in the ai_usage table.
 API keys are only passed to the client; they are never logged or printed.
 """
 import re
+import threading
+import time
 from dataclasses import dataclass
 
 from app.classifier.schema import ClassificationOutput
@@ -59,7 +61,8 @@ def get_chat_model(provider: str):
     """A LangChain chat model for `provider` (temperature 0, our timeout, no built-in retries)."""
     api_key, model = provider_settings(provider)
     common = {"model": model, "api_key": api_key, "temperature": 0,
-              "timeout": settings.ai_timeout_seconds, "max_retries": 0}
+              "timeout": settings.ai_timeout_seconds, "max_retries": 0,
+              "max_tokens": settings.ai_max_output_tokens}  # enough room so answers are not cut off
     if provider == "google":
         from langchain_google_genai import ChatGoogleGenerativeAI
         return ChatGoogleGenerativeAI(**common)
@@ -93,11 +96,43 @@ def build_structured_model(provider: str):
     return get_chat_model(provider).with_structured_output(ClassificationOutput, include_raw=True, **kwargs)
 
 
+# ------------------------------------------------------------------ quota breaker
+
+# provider -> monotonic time until which it is skipped. In memory: shared by all threads of THIS worker
+# process (a restarted worker tries the provider again, which is harmless: one call finds out).
+_cooldown_until: dict[str, float] = {}
+_cooldown_lock = threading.Lock()
+
+
+def start_quota_cooldown(provider: str) -> None:
+    """The provider said its DAILY quota is used up: skip it for ai_quota_cooldown_seconds."""
+    with _cooldown_lock:
+        _cooldown_until[provider] = time.monotonic() + settings.ai_quota_cooldown_seconds
+    log.warning("ai.quota_cooldown_started", provider=provider, seconds=settings.ai_quota_cooldown_seconds)
+
+
+def quota_cooldown_left(provider: str) -> float:
+    """Seconds this provider is still skipped (0 = available)."""
+    with _cooldown_lock:
+        return max(0.0, _cooldown_until.get(provider, 0.0) - time.monotonic())
+
+
+def reset_quota_cooldowns() -> None:
+    """For tests."""
+    with _cooldown_lock:
+        _cooldown_until.clear()
+
+
+# Daily-quota wording: Gemini "...PerDay..." / "per day"; Groq "tokens per day (TPD)" / "requests per day (RPD)".
+DAILY_QUOTA_RE = re.compile(r"per ?day|\b(rpd|tpd)\b", re.IGNORECASE)
+
+
 # ------------------------------------------------------------------ error classification
 
 @dataclass
 class AIErrorInfo:
-    code: str                  # AI_TIMEOUT | AI_RATE_LIMITED | AI_AUTH | AI_ERROR
+    code: str                  # AI_TIMEOUT | AI_RATE_LIMITED | AI_QUOTA_EXHAUSTED | AI_INVALID_OUTPUT | AI_AUTH
+                               # | AI_ERROR
     retryable: bool            # worth trying the SAME provider again?
     retry_after: float | None  # seconds the provider asked us to wait, if it said
     detail: str                # short, safe description (no keys)
@@ -145,10 +180,17 @@ def describe_error(exc: BaseException) -> AIErrorInfo:
     text = " ".join(str(e) for e in _error_chain(exc)).lower()
     detail = f"{type(exc).__name__}" + (f" (HTTP {status})" if status else "")
 
-    if any("timeout" in type(e).__name__.lower() for e in _error_chain(exc)) or isinstance(exc, TimeoutError):
+    names = [type(e).__name__.lower() for e in _error_chain(exc)]
+    if any("timeout" in n for n in names) or isinstance(exc, TimeoutError):
         return AIErrorInfo("AI_TIMEOUT", True, None, detail)
+    if any("lengthfinishreason" in n for n in names):
+        # The answer was cut off by the output-token limit: incomplete output, worth another try.
+        return AIErrorInfo("AI_INVALID_OUTPUT", True, None, detail)
     if status == 429 or "resource_exhausted" in text or "rate limit" in text:
-        return AIErrorInfo("AI_RATE_LIMITED", True, _retry_after(exc), detail)
+        if DAILY_QUOTA_RE.search(text):
+            # Out of quota for the DAY: retrying in a few seconds cannot help -> cool down, next provider.
+            return AIErrorInfo("AI_QUOTA_EXHAUSTED", False, None, detail + " daily quota")
+        return AIErrorInfo("AI_RATE_LIMITED", True, _retry_after(exc), detail)  # per-minute: back off, retry
     if status in (401, 403) or (status == 400 and ("api key" in text or "api_key" in text)):
         return AIErrorInfo("AI_AUTH", False, None, detail)  # bad key: retrying cannot help
     if status is not None and status >= 500:

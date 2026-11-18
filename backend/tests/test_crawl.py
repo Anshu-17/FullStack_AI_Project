@@ -1,7 +1,7 @@
 """Crawling one website: limits, no duplicates, stays on site, priorities, untrusted text."""
 import respx
 
-from app.crawler.crawl import crawl_site, link_priority
+from app.crawler.crawl import crawl_site, is_duplicate, link_priority
 from app.db.enums import PageOutcome
 
 SITE = "https://coop.example"
@@ -24,7 +24,7 @@ def fetched_urls(result) -> list[str]:
 @respx.mock
 def test_page_limit(fake_dns, crawler_settings):
     crawler_settings(crawl_max_pages=3)
-    fake_site({"/": links(*(f"/page{i}" for i in range(10))), **{f"/page{i}": "<p>x</p>" for i in range(10)}})
+    fake_site({"/": links(*(f"/page{i}" for i in range(10))), **{f"/page{i}": f"<p>page {i}</p>" for i in range(10)}})
     result = crawl_site(SITE)
     assert len(result.pages) == 3
     assert result.stopped_reason == "page_limit"
@@ -123,6 +123,36 @@ def test_one_bad_page_does_not_stop_the_crawl(fake_dns, no_sleep):
     outcomes = {p.url: p.outcome for p in crawl_site(SITE).pages}
     assert outcomes[f"{SITE}/broken"] == PageOutcome.HTTP_ERROR
     assert outcomes[f"{SITE}/about"] == PageOutcome.OK
+
+
+@respx.mock
+def test_identical_text_pages_are_marked_and_do_not_use_the_page_budget(fake_dns, crawler_settings):
+    crawler_settings(crawl_max_pages=3)
+    same = "<main><p>We buy grain at our elevators and post daily cash bids.</p></main>"
+    # Crawl order (all high priority, in link order): /grain, /grain-bids (same text!), /feed
+    fake_site({"/": links("/grain", "/grain-bids", "/feed"), "/grain": same, "/grain-bids": same,
+               "/feed": "<p>We sell bagged livestock feed.</p>"})
+    result = crawl_site(SITE)
+
+    urls = [p.url for p in result.pages]
+    duplicates = [p for p in result.pages if is_duplicate(p)]
+    assert [p.url for p in duplicates] == [f"{SITE}/grain-bids"]
+    assert duplicates[0].outcome == PageOutcome.OK
+    assert duplicates[0].error_detail == f"duplicate_of:{SITE}/grain"
+    assert result.duplicate_pages == 1
+    # 3 counted pages (/, /grain, /feed) + 1 duplicate: /feed was still fetched although the budget is 3
+    assert urls == [f"{SITE}/", f"{SITE}/grain", f"{SITE}/grain-bids", f"{SITE}/feed"]
+
+
+def test_duplicate_pages_are_not_sent_to_the_ai():
+    from app.classifier.select import select_passages
+    from app.db.models import Page
+
+    text = "We buy grain at our elevators and post daily cash bids every morning."
+    original = Page(id=1, job_id=1, url="https://c.example/", depth=0, outcome="ok", text_content=text)
+    copy = Page(id=2, job_id=1, url="https://c.example/home", depth=1, outcome="ok", text_content=text,
+                error_detail="duplicate_of:https://c.example/")
+    assert {p.page_id for p in select_passages([original, copy])} == {1}
 
 
 @respx.mock

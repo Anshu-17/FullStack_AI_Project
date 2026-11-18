@@ -17,6 +17,7 @@ import textwrap
 from dataclasses import dataclass
 
 from app.classifier.taxonomy import SITE_CATEGORY_NAMES, keyword_hits
+from app.crawler.crawl import is_duplicate
 from app.db.enums import PageOutcome
 
 MAX_PASSAGE_CHARS = 400
@@ -55,7 +56,8 @@ def split_into_passages(text: str) -> list[str]:
 
 def select_passages(pages) -> list[Passage]:
     """`pages`: Page rows of one job. Returns the passages to send, numbered P1, P2, ..."""
-    usable = [p for p in pages if p.outcome == PageOutcome.OK and p.text_content]
+    # Duplicate-text pages (same text as an earlier page) are skipped: the original is already included.
+    usable = [p for p in pages if p.outcome == PageOutcome.OK and p.text_content and not is_duplicate(p)]
     usable.sort(key=lambda p: (p.depth, p.id))  # homepage first, then in crawl order (deterministic)
 
     # All candidate passages, in page order: (page, text)

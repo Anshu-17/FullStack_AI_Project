@@ -300,3 +300,15 @@ sent to review (`review_required`), so a reviewer sees most of these cases anywa
 5. **Duplicate pages waste the 8-page budget** (MKC `/about*` pages with identical text; Grow West `/` and `/home`).
    Follow-up: skip a page whose text hash equals one already crawled.
 6. **Two sites block bots outright (403).** Respected as-is; such companies need manual research.
+
+## Follow-up: fixes made after this pilot (2026-11-18)
+
+| Finding above | Fix |
+|---|---|
+| 1-2. Gemini daily quota gone, still called 3x per attempt (85 wasted calls) | Quota breaker: a daily-quota 429 is not retried and the provider is skipped for 30 min by that worker (`skipped_quota` rows, no call) |
+| 3. Groq 20b weaker; `LengthFinishReasonError` | Groq default is now `openai/gpt-oss-120b`; output limit raised to 8,192 tokens; a cut-off answer is treated as invalid output and retried |
+| 5. Duplicate pages waste the page budget | Pages with text identical to an earlier page are marked `duplicate_of:<url>`, not counted, not sent to the AI |
+| 4. TLS chain problem shown as `robots_disallowed` | Not fixed yet (still open) |
+
+These fixes are covered by automated tests; the pilot itself was NOT re-run, so the numbers above are still the
+numbers of run #15.

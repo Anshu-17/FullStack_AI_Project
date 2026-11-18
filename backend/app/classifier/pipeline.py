@@ -23,7 +23,14 @@ from sqlalchemy import select
 from tenacity import RetryCallState, Retrying, retry_if_exception, stop_after_attempt, wait_exponential_jitter
 
 from app.classifier.prompts import build_messages
-from app.classifier.providers import build_structured_model, describe_error, provider_order, provider_settings
+from app.classifier.providers import (
+    build_structured_model,
+    describe_error,
+    provider_order,
+    provider_settings,
+    quota_cooldown_left,
+    start_quota_cooldown,
+)
 from app.classifier.schema import ClassificationOutput
 from app.classifier.select import select_passages
 from app.classifier.taxonomy import POLICY_VERSION, PROMPT_VERSION, accounting_rule_decision
@@ -40,7 +47,10 @@ MAX_WAIT_SECONDS = 10.0  # cap on any wait between attempts, including a provide
 
 # ai_usage.outcome for each error code
 OUTCOME_FOR_CODE = {"AI_TIMEOUT": "timeout", "AI_RATE_LIMITED": "rate_limited",
-                    "AI_INVALID_OUTPUT": "invalid_output", "AI_AUTH": "error", "AI_ERROR": "error"}
+                    "AI_QUOTA_EXHAUSTED": "quota_exhausted", "AI_INVALID_OUTPUT": "invalid_output",
+                    "AI_AUTH": "error", "AI_ERROR": "error"}
+# finish_reason values that mean "the answer was cut off by the output-token limit"
+TRUNCATED_FINISH_REASONS = {"length", "max_tokens"}
 
 
 class NoContentError(Exception):
@@ -118,7 +128,11 @@ def call_once(db, job_id, provider, model, structured_model, messages, passages,
     raw_message = result.get("raw")
     usage = dict(getattr(raw_message, "usage_metadata", None) or {})
     parsed = result.get("parsed")
+    finish = str((getattr(raw_message, "response_metadata", None) or {}).get("finish_reason") or "").lower()
     try:
+        if finish in TRUNCATED_FINISH_REASONS:
+            # Cut off by the token limit: even if a partial answer parsed, it is not trustworthy -> retry.
+            raise InvalidModelOutput(f"answer cut off by the output-token limit (finish_reason={finish})")
         if not isinstance(parsed, ClassificationOutput):
             error = result.get("parsing_error")
             # Keep the END of the message: that is where Pydantic says which field was wrong.
@@ -156,6 +170,13 @@ def call_with_fallback(db, job_id, messages, passages, pages):
     errors = []
     for provider in providers:
         _, model = provider_settings(provider)
+        cooling = quota_cooldown_left(provider)
+        if cooling:
+            # Its DAILY quota ran out recently: don't call it at all, go straight to the next provider.
+            _record_usage(db, job_id, provider, model, time.perf_counter(), "skipped_quota", "AI_QUOTA_COOLDOWN")
+            log.info("ai.provider_skipped_quota", provider=provider, cooldown_seconds_left=int(cooling))
+            errors.append(f"{provider}: AI_QUOTA_COOLDOWN")
+            continue
         structured_model = build_structured_model(provider)
         retrying = Retrying(
             stop=stop_after_attempt(ATTEMPTS_PER_PROVIDER),
@@ -169,6 +190,8 @@ def call_with_fallback(db, job_id, messages, passages, pages):
                 call_once, db, job_id, provider, model, structured_model, messages, passages, pages)
             return decisions, issues, provider, model
         except AICallFailed as exc:
+            if exc.code == "AI_QUOTA_EXHAUSTED":
+                start_quota_cooldown(provider)  # every later job in this worker skips it for a while
             errors.append(f"{provider}: {exc.code}")
             log.warning("ai.provider_failed", provider=provider, error_code=exc.code)
     raise AIUnavailableError("all AI providers failed: " + ", ".join(errors))

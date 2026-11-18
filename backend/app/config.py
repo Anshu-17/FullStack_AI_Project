@@ -39,9 +39,14 @@ class Settings(BaseSettings):
     ai_provider: str = "google"          # tried first
     ai_fallback_providers: str = "groq"  # comma-separated, tried in order if the primary fails
     ai_timeout_seconds: float = 60
+    # Room for the answer AND the model's hidden "thinking" tokens (Gemini 2.5 used ~1,800 of ~3,500 output tokens
+    # on real sites), so answers are not cut off. A cut-off answer is treated as invalid output and retried.
+    ai_max_output_tokens: int = 8192
+    # A provider that says its DAILY quota is used up is skipped by this worker process for this long.
+    ai_quota_cooldown_seconds: int = 1800
     google_model: str = "gemini-2.5-flash"
     google_api_key: str = ""
-    groq_model: str = "openai/gpt-oss-20b"  # via Groq's OpenAI-compatible API
+    groq_model: str = "openai/gpt-oss-120b"  # via Groq's OpenAI-compatible API (120b: stronger than 20b)
     groq_api_key: str = ""
     anthropic_model: str = ""
     anthropic_api_key: str = ""
@@ -81,6 +86,30 @@ class Settings(BaseSettings):
     job_lease_seconds: int = 120  # a job whose lease is not renewed for this long is presumed abandoned
     job_max_attempts: int = 3
     job_backoff_base_seconds: int = 10  # retry waits: base * 2^(attempt-1), max 300 s (shorter only for tests)
+
+    @model_validator(mode="after")
+    def normalise_database_url(self):
+        """Accept the connection string exactly as Supabase / Render show it.
+
+        - "postgres://" or "postgresql://" -> "postgresql+psycopg://" (tells SQLAlchemy to use psycopg 3)
+        - a Supabase host without sslmode gets "sslmode=require" (Supabase only accepts encrypted connections)
+        """
+        url = self.database_url.strip()
+        for prefix in ("postgres://", "postgresql://"):
+            if url.startswith(prefix):
+                url = "postgresql+psycopg://" + url[len(prefix):]
+        if ("supabase.co" in url or "supabase.com" in url) and "sslmode=" not in url:
+            url += ("&" if "?" in url else "?") + "sslmode=require"
+        self.database_url = url
+        return self
+
+    @model_validator(mode="after")
+    def production_worker_defaults(self):
+        """Free hosting has little memory and free AI tiers have tight limits: 1 worker thread in production,
+        unless WORKER_CONCURRENCY is set explicitly."""
+        if self.environment == "production" and "worker_concurrency" not in self.model_fields_set:
+            self.worker_concurrency = 1
+        return self
 
     @model_validator(mode="after")
     def refuse_weak_secret_in_production(self):
